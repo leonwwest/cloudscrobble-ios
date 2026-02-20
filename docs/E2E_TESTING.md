@@ -62,7 +62,17 @@ go run .
 ```
 
 ### Start app
-Run `CloudScrobbleApp` with root env variables set.
+Preferred: run the iOS Xcode target.
+
+```bash
+open ios/CloudScrobbleiOS.xcodeproj
+```
+
+Then in Xcode set env vars from root `.env` under:
+- Scheme > Run > Arguments > Environment Variables
+
+Alternative (desktop SwiftPM executable):
+- `swift run CloudScrobbleApp`
 
 ## 5) Manual acceptance checklist
 

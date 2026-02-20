@@ -29,6 +29,7 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
 - `/Sources/CloudScrobbleApp` - SwiftUI app and view models
 - `/Tests/CloudScrobbleCoreTests` - unit tests for core logic
 - `/backend` - SoundCloud token broker backend
+- `/ios` - generated Xcode iOS app project (`CloudScrobbleiOS.xcodeproj`)
 
 ## Environment variables (app)
 Set these before running the app target:
@@ -54,6 +55,17 @@ go run .
 swift test
 cd backend && go test ./...
 ```
+
+## Run iOS app (Xcode target)
+```bash
+open ios/CloudScrobbleiOS.xcodeproj
+```
+
+In Xcode:
+1. Select scheme `CloudScrobbleiOS`.
+2. Choose an iOS Simulator.
+3. Set run environment variables from `.env` in Scheme > Run > Arguments.
+4. Run.
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`

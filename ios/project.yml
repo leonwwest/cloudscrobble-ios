@@ -1,0 +1,37 @@
+name: CloudScrobbleiOS
+options:
+  minimumXcodeGenVersion: 2.44.0
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+packages:
+  CloudScrobblePackage:
+    path: ..
+targets:
+  CloudScrobbleiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../Sources/CloudScrobbleApp
+    info:
+      path: CloudScrobbleiOS/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonwestermeir.cloudscrobble.ios
+        PRODUCT_NAME: CloudScrobble
+        INFOPLIST_KEY_CFBundleDisplayName: CloudScrobble
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    dependencies:
+      - package: CloudScrobblePackage
+        product: CloudScrobbleCore
+schemes:
+  CloudScrobbleiOS:
+    build:
+      targets:
+        CloudScrobbleiOS: all
+    run:
+      config: Debug
