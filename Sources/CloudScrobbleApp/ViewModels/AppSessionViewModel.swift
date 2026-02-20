@@ -1,3 +1,4 @@
+import AuthenticationServices
 import CloudScrobbleCore
 import Foundation
 
@@ -129,6 +130,14 @@ final class AppSessionViewModel: ObservableObject {
             return
         }
 
+        do {
+            let callbackScheme = try callbackScheme(from: config.soundCloudRedirectURI)
+            try validateRedirectSchemeRegistration(callbackScheme)
+        } catch {
+            statusMessage = "SoundCloud config error: \(error.localizedDescription)"
+            return
+        }
+
         isBusy = true
         defer { isBusy = false }
 
@@ -161,7 +170,7 @@ final class AppSessionViewModel: ObservableObject {
             soundCloudConnected = true
             statusMessage = "SoundCloud connected"
         } catch {
-            statusMessage = "SoundCloud login failed: \(error.localizedDescription)"
+            statusMessage = "SoundCloud login failed: \(friendlySoundCloudAuthError(error))"
         }
     }
 
@@ -263,5 +272,41 @@ final class AppSessionViewModel: ObservableObject {
             throw CloudScrobbleError.invalidConfiguration("SOUNDCLOUD_REDIRECT_URI must include a scheme")
         }
         return scheme
+    }
+
+    private func validateRedirectSchemeRegistration(_ scheme: String) throws {
+        guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] else {
+            throw CloudScrobbleError.invalidConfiguration(
+                "App URL schemes are not configured. Add \(scheme) to CFBundleURLTypes."
+            )
+        }
+
+        let schemes = urlTypes
+            .compactMap { $0["CFBundleURLSchemes"] as? [String] }
+            .flatMap { $0 }
+            .map { $0.lowercased() }
+
+        guard schemes.contains(scheme.lowercased()) else {
+            throw CloudScrobbleError.invalidConfiguration(
+                "Missing URL scheme \(scheme). Register it in Info.plist CFBundleURLTypes."
+            )
+        }
+    }
+
+    private func friendlySoundCloudAuthError(_ error: Error) -> String {
+        if let authError = error as? ASWebAuthenticationSessionError {
+            switch authError.code {
+            case .canceledLogin:
+                return "Login was canceled."
+            case .presentationContextInvalid:
+                return "Invalid auth presentation context. Restart the app and try again."
+            case .presentationContextNotProvided:
+                return "Auth presentation context not provided."
+            @unknown default:
+                return authError.localizedDescription
+            }
+        }
+
+        return error.localizedDescription
     }
 }

@@ -5,40 +5,41 @@ struct SearchView: View {
     @StateObject var viewModel: SearchViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                TextField("Search tracks, playlists, users", text: $viewModel.query)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        Task { await viewModel.runSearch(reset: true) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                controlCard
+
+                if viewModel.isLoading {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(CloudTheme.sky)
+                        Text("Searching…")
+                            .font(.system(.subheadline, design: .rounded))
+                            .foregroundStyle(CloudTheme.muted)
                     }
-
-                Picker("Scope", selection: $viewModel.scope) {
-                    ForEach(SearchViewModel.Scope.allCases) { scope in
-                        Text(scope.rawValue).tag(scope)
-                    }
+                    .padding(.horizontal, 8)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 320)
 
-                Button("Search") {
-                    Task { await viewModel.runSearch(reset: true) }
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(CloudTheme.warning)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(CloudTheme.warning.opacity(0.1))
+                        )
                 }
-                .buttonStyle(.borderedProminent)
-            }
 
-            if viewModel.isLoading {
-                ProgressView()
+                content
             }
-
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            contentList
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
         }
+        .scrollIndicators(.hidden)
+        .navigationTitle("Discover")
+        .cloudInlineNavigationTitle()
         .sheet(item: Binding(
             get: {
                 viewModel.selectedUserProfile.map { profile in
@@ -68,66 +69,248 @@ struct SearchView: View {
                     Task { await viewModel.play(track: track) }
                 }
             )
-            .frame(minWidth: 480, minHeight: 360)
         }
     }
 
+    private var controlCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Search SoundCloud")
+                .font(.system(.headline, design: .rounded).weight(.semibold))
+                .foregroundStyle(CloudTheme.ink)
+
+            TextField("Tracks, playlists, users", text: $viewModel.query)
+                .cloudCredentialField()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.92))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(CloudTheme.sky.opacity(0.35), lineWidth: 1)
+                )
+                .onSubmit {
+                    Task { await viewModel.runSearch(reset: true) }
+                }
+
+            Picker("Scope", selection: $viewModel.scope) {
+                ForEach(SearchViewModel.Scope.allCases) { scope in
+                    Text(scope.rawValue).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Button("Run Search") {
+                Task { await viewModel.runSearch(reset: true) }
+            }
+            .buttonStyle(PrimaryPillButtonStyle())
+        }
+        .cloudCard()
+    }
+
     @ViewBuilder
-    private var contentList: some View {
+    private var content: some View {
         switch viewModel.scope {
         case .tracks:
-            List(viewModel.tracks) { track in
-                Button {
-                    Task { await viewModel.play(track: track) }
-                } label: {
-                    VStack(alignment: .leading) {
-                        Text(track.title)
-                        Text(track.user.username)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            if viewModel.tracks.isEmpty {
+                EmptyStateCard(
+                    icon: "waveform.badge.magnifyingglass",
+                    title: "No tracks yet",
+                    subtitle: "Start with a search term and run search."
+                )
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.tracks) { track in
+                        TrackResultCard(track: track) {
+                            Task { await viewModel.play(track: track) }
+                        }
+                        .task {
+                            await viewModel.loadMoreIfNeeded(currentItemID: track.id)
+                        }
                     }
-                }
-                .buttonStyle(.plain)
-                .task {
-                    await viewModel.loadMoreIfNeeded(currentItemID: track.id)
                 }
             }
         case .playlists:
-            List(viewModel.playlists) { playlist in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(playlist.title)
-                        Text(playlist.user.username)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            if viewModel.playlists.isEmpty {
+                EmptyStateCard(
+                    icon: "music.note.list",
+                    title: "No playlists yet",
+                    subtitle: "Search for playlists and open one to play its tracks."
+                )
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.playlists) { playlist in
+                        PlaylistResultCard(playlist: playlist) {
+                            Task { await viewModel.open(playlist: playlist) }
+                        }
+                        .task {
+                            await viewModel.loadMoreIfNeeded(currentItemID: playlist.id)
+                        }
                     }
-
-                    Spacer()
-
-                    Button("Open") {
-                        Task { await viewModel.open(playlist: playlist) }
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .task {
-                    await viewModel.loadMoreIfNeeded(currentItemID: playlist.id)
                 }
             }
         case .users:
-            List(viewModel.users) { user in
-                HStack {
-                    Text(user.username)
-                    Spacer()
-                    Button("Profile") {
-                        Task { await viewModel.open(user: user) }
+            if viewModel.users.isEmpty {
+                EmptyStateCard(
+                    icon: "person.2.crop.square.stack",
+                    title: "No users yet",
+                    subtitle: "Search for artists and open a profile."
+                )
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.users) { user in
+                        UserResultCard(user: user) {
+                            Task { await viewModel.open(user: user) }
+                        }
+                        .task {
+                            await viewModel.loadMoreIfNeeded(currentItemID: user.id)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                }
-                .task {
-                    await viewModel.loadMoreIfNeeded(currentItemID: user.id)
                 }
             }
         }
+    }
+}
+
+private struct TrackResultCard: View {
+    let track: SCTrack
+    let onPlay: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: track.artworkURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(CloudTheme.sky.opacity(0.2))
+                        .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
+                }
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.ink)
+                    .lineLimit(2)
+                Text(track.user.username)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(CloudTheme.muted)
+            }
+
+            Spacer()
+
+            Button(action: onPlay) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(Circle().fill(CloudTheme.sky))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+        )
+    }
+}
+
+private struct PlaylistResultCard: View {
+    let playlist: SCPlaylist
+    let onOpen: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(CloudTheme.sky)
+                .frame(width: 42, height: 42)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(CloudTheme.sky.opacity(0.15))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(playlist.title)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.ink)
+                    .lineLimit(2)
+                Text(playlist.user.username)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(CloudTheme.muted)
+            }
+
+            Spacer()
+
+            if let onOpen {
+                Button("Open", action: onOpen)
+                    .buttonStyle(SecondaryPillButtonStyle())
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+        )
+    }
+}
+
+private struct UserResultCard: View {
+    let user: SCUser
+    let onOpen: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: user.avatarURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    Circle()
+                        .fill(CloudTheme.sky.opacity(0.2))
+                        .overlay(Image(systemName: "person.fill").foregroundStyle(CloudTheme.sky))
+                }
+            }
+            .frame(width: 42, height: 42)
+            .clipShape(Circle())
+
+            Text(user.username)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .foregroundStyle(CloudTheme.ink)
+
+            Spacer()
+
+            Button("Profile", action: onOpen)
+                .buttonStyle(SecondaryPillButtonStyle())
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+        )
     }
 }
 
@@ -141,29 +324,37 @@ private struct UserProfileSheet: View {
     let onPlayTrack: (SCTrack) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(profile.user.username)
-                .font(.title3.bold())
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile.user.username)
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                        Text("Public Profile")
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(CloudTheme.muted)
+                    }
+                    .cloudCard()
 
-            Text("Tracks")
-                .font(.headline)
+                    Text("Tracks")
+                        .font(.system(.headline, design: .rounded).weight(.semibold))
+                    ForEach(profile.tracks.prefix(20)) { track in
+                        TrackResultCard(track: track) {
+                            onPlayTrack(track)
+                        }
+                    }
 
-            List(profile.tracks.prefix(20)) { track in
-                Button(track.title) {
-                    onPlayTrack(track)
+                    Text("Playlists")
+                        .font(.system(.headline, design: .rounded).weight(.semibold))
+                    ForEach(profile.playlists.prefix(20)) { playlist in
+                        PlaylistResultCard(playlist: playlist, onOpen: nil)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding()
             }
-
-            Text("Playlists")
-                .font(.headline)
-
-            List(profile.playlists.prefix(20)) { playlist in
-                Text(playlist.title)
-            }
+            .navigationTitle("User")
+            .cloudInlineNavigationTitle()
         }
-        .padding()
-        .frame(minWidth: 480, minHeight: 420)
     }
 }
 
@@ -173,22 +364,29 @@ private struct PlaylistTracksSheet: View {
     let onPlayTrack: (SCTrack) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Playlist Tracks")
-                    .font(.headline)
-                Spacer()
-                Button("Play All", action: onPlayAll)
-                    .buttonStyle(.borderedProminent)
-            }
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Playlist Tracks")
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+                        Spacer()
+                        Button("Play All", action: onPlayAll)
+                            .buttonStyle(PrimaryPillButtonStyle())
+                            .frame(maxWidth: 160)
+                    }
+                    .cloudCard()
 
-            List(tracks) { track in
-                Button(track.title) {
-                    onPlayTrack(track)
+                    ForEach(tracks) { track in
+                        TrackResultCard(track: track) {
+                            onPlayTrack(track)
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding()
             }
+            .navigationTitle("Playlist")
+            .cloudInlineNavigationTitle()
         }
-        .padding()
     }
 }

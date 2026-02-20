@@ -17,6 +17,12 @@ targets:
       - path: ../Sources/CloudScrobbleApp
     info:
       path: CloudScrobbleiOS/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.cloudscrobble.oauth
+            CFBundleURLSchemes:
+              - cloudscrobble
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.leonwestermeir.cloudscrobble.ios

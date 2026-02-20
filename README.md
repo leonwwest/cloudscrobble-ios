@@ -74,6 +74,13 @@ One-click alternative:
 
 This syncs `.env` to the Xcode scheme and opens the iOS project.
 
+## SoundCloud OAuth checklist
+If "Connect SoundCloud" fails in-app, verify:
+1. SoundCloud app redirect URI is exactly `cloudscrobble://oauth`.
+2. Backend token broker is running on the same URL as `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.
+3. Xcode scheme env vars are synced (run `./scripts/sync_env_to_xcode_scheme.sh`).
+4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
+
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`
 - Full manual E2E guide: `docs/E2E_TESTING.md`

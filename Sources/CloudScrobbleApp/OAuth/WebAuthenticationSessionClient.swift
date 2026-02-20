@@ -27,10 +27,18 @@ final class WebAuthenticationSessionClient: NSObject {
                 continuation.resume(returning: callbackURL)
             }
 
-            session.prefersEphemeralWebBrowserSession = true
+            // Use the default browser session to avoid provider-specific login issues in strict ephemeral mode.
+            session.prefersEphemeralWebBrowserSession = false
             session.presentationContextProvider = self
             self.session = session
-            session.start()
+            guard session.start() else {
+                continuation.resume(
+                    throwing: CloudScrobbleError.invalidConfiguration(
+                        "Could not start the iOS web authentication session."
+                    )
+                )
+                return
+            }
         }
     }
 }
