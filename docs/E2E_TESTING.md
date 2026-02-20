@@ -71,6 +71,12 @@ open ios/CloudScrobbleiOS.xcodeproj
 Then in Xcode set env vars from root `.env` under:
 - Scheme > Run > Arguments > Environment Variables
 
+One-click helper:
+```bash
+./scripts/open_ios_with_env.sh
+```
+This command syncs `.env` into `CloudScrobbleiOS` scheme env vars and opens the project.
+
 Alternative (desktop SwiftPM executable):
 - `swift run CloudScrobbleApp`
 

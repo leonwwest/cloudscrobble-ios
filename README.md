@@ -67,6 +67,13 @@ In Xcode:
 3. Set run environment variables from `.env` in Scheme > Run > Arguments.
 4. Run.
 
+One-click alternative:
+```bash
+./scripts/open_ios_with_env.sh
+```
+
+This syncs `.env` to the Xcode scheme and opens the iOS project.
+
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`
 - Full manual E2E guide: `docs/E2E_TESTING.md`
