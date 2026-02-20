@@ -17,19 +17,13 @@ struct ContentView: View {
                     .offset(y: headerVisible ? 0 : 12)
 
                 TabView {
-                    NavigationStack {
-                        SearchView(viewModel: SearchViewModel(session: session))
-                    }
+                    SearchView(viewModel: SearchViewModel(session: session))
                     .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-                    NavigationStack {
-                        LibraryView(viewModel: LibraryViewModel(session: session))
-                    }
+                    LibraryView(viewModel: LibraryViewModel(session: session))
                     .tabItem { Label("Library", systemImage: "books.vertical") }
 
-                    NavigationStack {
-                        PlayerView(controller: session.playerController)
-                    }
+                    PlayerView(controller: session.playerController)
                     .tabItem { Label("Player", systemImage: "play.circle.fill") }
                 }
                 .tint(CloudTheme.sky)

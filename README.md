@@ -80,6 +80,7 @@ If "Connect SoundCloud" fails in-app, verify:
 2. Backend token broker is running on the same URL as `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.
 3. Xcode scheme env vars are synced (run `./scripts/sync_env_to_xcode_scheme.sh`).
 4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
+5. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`
