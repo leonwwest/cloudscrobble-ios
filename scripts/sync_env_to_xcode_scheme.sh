@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${1:-$ROOT_DIR/.env}"
 SCHEME_FILE="${2:-$ROOT_DIR/ios/CloudScrobbleiOS.xcodeproj/xcshareddata/xcschemes/CloudScrobbleiOS.xcscheme}"
 
+if pgrep -x "Xcode" >/dev/null 2>&1; then
+  echo "Xcode is running. Please close Xcode before syncing env vars, otherwise scheme changes may be overwritten." >&2
+  exit 1
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
   exit 1
