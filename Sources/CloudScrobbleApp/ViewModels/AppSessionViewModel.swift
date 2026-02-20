@@ -96,6 +96,12 @@ final class AppSessionViewModel: ObservableObject {
             self.lastFMAuthService = nil
             self.lastFMScrobbleService = nil
             self.mutableScrobbler = MutableLastFMScrobbler(wrapped: nil)
+            let missing = AppConfig.missingEnvironmentKeys()
+            if missing.isEmpty {
+                statusMessage = "Missing app configuration. Ensure env vars are set in the Xcode scheme."
+            } else {
+                statusMessage = "Missing scheme env vars: \(missing.joined(separator: ", "))"
+            }
         }
 
         playerController = PlayerScrobbleController(lastFMScrobbler: mutableScrobbler)

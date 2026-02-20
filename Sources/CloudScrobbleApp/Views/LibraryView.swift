@@ -37,8 +37,6 @@ struct LibraryView: View {
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
-        .navigationTitle("Library")
-        .cloudInlineNavigationTitle()
         .task {
             await viewModel.refresh()
         }
@@ -175,4 +173,3 @@ private struct LibrarySectionCard<Content: View>: View {
         .cloudCard()
     }
 }
-

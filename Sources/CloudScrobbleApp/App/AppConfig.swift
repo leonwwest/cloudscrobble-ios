@@ -8,6 +8,14 @@ struct AppConfig {
     let lastFMAPIKey: String
     let lastFMAPISecret: String
 
+    static let requiredEnvironmentKeys = [
+        "SOUNDCLOUD_CLIENT_ID",
+        "SOUNDCLOUD_REDIRECT_URI",
+        "SOUNDCLOUD_TOKEN_BROKER_BASE_URL",
+        "LASTFM_API_KEY",
+        "LASTFM_API_SECRET"
+    ]
+
     static func loadFromEnvironment() -> AppConfig? {
         let env = ProcessInfo.processInfo.environment
 
@@ -27,5 +35,13 @@ struct AppConfig {
             lastFMAPIKey: lastFMAPIKey,
             lastFMAPISecret: lastFMAPISecret
         )
+    }
+
+    static func missingEnvironmentKeys() -> [String] {
+        let env = ProcessInfo.processInfo.environment
+        return requiredEnvironmentKeys.filter { key in
+            guard let value = env[key] else { return true }
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }

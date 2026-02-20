@@ -15,8 +15,6 @@ struct PlayerView: View {
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
-        .navigationTitle("Player")
-        .cloudInlineNavigationTitle()
     }
 
     @ViewBuilder
@@ -168,4 +166,3 @@ struct PlayerView: View {
         return false
     }
 }
-

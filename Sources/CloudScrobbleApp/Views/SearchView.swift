@@ -38,8 +38,6 @@ struct SearchView: View {
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
-        .navigationTitle("Discover")
-        .cloudInlineNavigationTitle()
         .sheet(item: Binding(
             get: {
                 viewModel.selectedUserProfile.map { profile in
@@ -352,8 +350,6 @@ private struct UserProfileSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("User")
-            .cloudInlineNavigationTitle()
         }
     }
 }
@@ -385,8 +381,6 @@ private struct PlaylistTracksSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("Playlist")
-            .cloudInlineNavigationTitle()
         }
     }
 }
