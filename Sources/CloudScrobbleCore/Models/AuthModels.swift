@@ -1,0 +1,69 @@
+import Foundation
+
+public struct SoundCloudToken: Codable, Sendable {
+    public let accessToken: String
+    public let refreshToken: String?
+    public let tokenType: String?
+    public let scope: String?
+    public let expiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case tokenType = "token_type"
+        case scope
+        case expiresIn = "expires_in"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accessToken = try container.decode(String.self, forKey: .accessToken)
+        refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
+        tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
+        scope = try container.decodeIfPresent(String.self, forKey: .scope)
+
+        if let expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) {
+            expiresAt = Date().addingTimeInterval(TimeInterval(expiresIn))
+        } else {
+            expiresAt = nil
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(accessToken, forKey: .accessToken)
+        try container.encodeIfPresent(refreshToken, forKey: .refreshToken)
+        try container.encodeIfPresent(tokenType, forKey: .tokenType)
+        try container.encodeIfPresent(scope, forKey: .scope)
+
+        if let expiresAt {
+            let remaining = max(0, Int(expiresAt.timeIntervalSinceNow.rounded()))
+            try container.encode(remaining, forKey: .expiresIn)
+        }
+    }
+
+    public init(
+        accessToken: String,
+        refreshToken: String?,
+        tokenType: String?,
+        scope: String?,
+        expiresAt: Date?
+    ) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.tokenType = tokenType
+        self.scope = scope
+        self.expiresAt = expiresAt
+    }
+
+    public func isExpired(leeway: TimeInterval = 45) -> Bool {
+        guard let expiresAt else { return false }
+        return Date().addingTimeInterval(leeway) >= expiresAt
+    }
+}
+
+public struct LastFMSession: Codable, Sendable {
+    public let name: String
+    public let key: String
+    public let subscriber: Int
+}
