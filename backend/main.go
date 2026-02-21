@@ -121,8 +121,8 @@ func main() {
 func loadConfig() (config, error) {
 	cfg := config{
 		Addr:               envOrDefault("ADDR", ":8787"),
-		SoundCloudClientID: os.Getenv("SOUNDCLOUD_CLIENT_ID"),
-		SoundCloudSecret:   os.Getenv("SOUNDCLOUD_CLIENT_SECRET"),
+		SoundCloudClientID: envOrDefault("SOUNDCLOUD_CLIENT_ID", ""),
+		SoundCloudSecret:   envOrDefault("SOUNDCLOUD_CLIENT_SECRET", ""),
 		SoundCloudTokenURL: envOrDefault("SOUNDCLOUD_TOKEN_URL", "https://secure.soundcloud.com/oauth/token"),
 		AllowedOrigin:      envOrDefault("ALLOWED_ORIGIN", "*"),
 		RequestTimeout:     15 * time.Second,
@@ -198,7 +198,7 @@ func writeJSON(w http.ResponseWriter, code int, payload any) {
 
 func envOrDefault(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
-		return val
+		return strings.TrimSpace(val)
 	}
 	return fallback
 }

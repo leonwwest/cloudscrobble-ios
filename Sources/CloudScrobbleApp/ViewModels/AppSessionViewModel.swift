@@ -1,5 +1,8 @@
 import CloudScrobbleCore
 import Foundation
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 
 actor MutableLastFMScrobbler: LastFMScrobbleSending {
     var wrapped: LastFMScrobbleSending?
@@ -174,11 +177,21 @@ final class AppSessionViewModel: ObservableObject {
                 redirectURI: config.soundCloudRedirectURI
             )
 
+            let callbackScheme = try callbackScheme(from: config.soundCloudRedirectURI)
+
+#if canImport(AuthenticationServices) && canImport(UIKit)
+            let callbackURL = try await browserClient.authenticate(
+                url: authURL,
+                callbackScheme: callbackScheme
+            )
+            await handleIncomingOAuthCallback(callbackURL)
+#else
             try browserClient.open(url: authURL)
             statusMessage = "Continue SoundCloud login in browser and return to the app."
+#endif
         } catch {
             pendingSoundCloudAuthorization = nil
-            statusMessage = "SoundCloud login failed: \(error.localizedDescription)"
+            statusMessage = normalizedAuthErrorMessage(error)
         }
     }
 
@@ -364,5 +377,16 @@ final class AppSessionViewModel: ObservableObject {
                 "Missing URL scheme \(scheme). Register it in Info.plist CFBundleURLTypes."
             )
         }
+    }
+
+    private func normalizedAuthErrorMessage(_ error: Error) -> String {
+#if canImport(AuthenticationServices)
+        let nsError = error as NSError
+        if nsError.domain == ASWebAuthenticationSessionError.errorDomain,
+           nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+            return "SoundCloud login canceled."
+        }
+#endif
+        return "SoundCloud login failed: \(error.localizedDescription)"
     }
 }

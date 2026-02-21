@@ -15,6 +15,7 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
 - `CloudScrobbleApp` (SwiftUI executable target)
   - Tabs: Search / Library / Player
   - Connect SoundCloud and Last.fm
+  - SoundCloud login via `ASWebAuthenticationSession` (callback deep-link)
   - Search tracks/playlists/users
   - Open public user profiles
   - Load and play playlist tracks
@@ -81,9 +82,12 @@ If "Connect SoundCloud" fails in-app, verify:
 2. Backend token broker is running on the same URL as `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.
 3. Xcode scheme env vars are synced (run `./scripts/sync_env_to_xcode_scheme.sh`).
 4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
-5. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
-6. Current app flow opens SoundCloud login in the system browser and returns to app via `cloudscrobble://oauth`.
-7. Fallback for testing: use `Use SoundCloud Public Mode` in-app (search/playback works, `/me` library stays unavailable).
+5. In SoundCloud app settings (`https://soundcloud.com/you/apps`) click `Speichern` after entering redirect URI.
+6. Validate broker credentials quickly:
+   `curl -X POST http://127.0.0.1:8787/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -d '{}'`
+   If this returns `{"error":"invalid_client"}`, your `SOUNDCLOUD_CLIENT_ID` / `SOUNDCLOUD_CLIENT_SECRET` pair is wrong.
+7. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
+8. Fallback for testing: use `Use SoundCloud Public Mode` in-app (search/playback works, `/me` library stays unavailable).
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`

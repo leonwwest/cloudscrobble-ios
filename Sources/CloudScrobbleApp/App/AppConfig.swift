@@ -19,12 +19,26 @@ struct AppConfig {
     static func loadFromEnvironment() -> AppConfig? {
         let env = ProcessInfo.processInfo.environment
 
-        guard let soundCloudClientID = env["SOUNDCLOUD_CLIENT_ID"],
-              let redirectURI = env["SOUNDCLOUD_REDIRECT_URI"],
-              let tokenBrokerRaw = env["SOUNDCLOUD_TOKEN_BROKER_BASE_URL"],
-              let tokenBrokerBaseURL = URL(string: tokenBrokerRaw),
-              let lastFMAPIKey = env["LASTFM_API_KEY"],
-              let lastFMAPISecret = env["LASTFM_API_SECRET"] else {
+        guard let rawSoundCloudClientID = env["SOUNDCLOUD_CLIENT_ID"],
+              let rawRedirectURI = env["SOUNDCLOUD_REDIRECT_URI"],
+              let rawTokenBroker = env["SOUNDCLOUD_TOKEN_BROKER_BASE_URL"],
+              let rawLastFMAPIKey = env["LASTFM_API_KEY"],
+              let rawLastFMAPISecret = env["LASTFM_API_SECRET"] else {
+            return nil
+        }
+
+        let soundCloudClientID = rawSoundCloudClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let redirectURI = rawRedirectURI.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokenBrokerRaw = rawTokenBroker.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastFMAPIKey = rawLastFMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastFMAPISecret = rawLastFMAPISecret.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !soundCloudClientID.isEmpty,
+              !redirectURI.isEmpty,
+              !tokenBrokerRaw.isEmpty,
+              !lastFMAPIKey.isEmpty,
+              !lastFMAPISecret.isEmpty,
+              let tokenBrokerBaseURL = URL(string: tokenBrokerRaw) else {
             return nil
         }
 

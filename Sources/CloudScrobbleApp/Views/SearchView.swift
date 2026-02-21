@@ -14,7 +14,7 @@ struct SearchView: View {
                         ProgressView()
                             .tint(CloudTheme.sky)
                         Text("Searching…")
-                            .font(.system(.subheadline, design: .rounded))
+                            .font(.system(.subheadline, design: .serif))
                             .foregroundStyle(CloudTheme.muted)
                     }
                     .padding(.horizontal, 8)
@@ -22,7 +22,7 @@ struct SearchView: View {
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
-                        .font(.system(.caption, design: .rounded))
+                        .font(.system(.caption, design: .serif))
                         .foregroundStyle(CloudTheme.warning)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,7 +73,7 @@ struct SearchView: View {
     private var controlCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Search SoundCloud")
-                .font(.system(.headline, design: .rounded).weight(.semibold))
+                .font(.system(.headline, design: .serif).weight(.bold))
                 .foregroundStyle(CloudTheme.ink)
 
             TextField("Tracks, playlists, users", text: $viewModel.query)
@@ -194,11 +194,11 @@ private struct TrackResultCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(track.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .font(.system(.subheadline, design: .serif).weight(.semibold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                 Text(track.user.username)
-                    .font(.system(.caption, design: .rounded))
+                    .font(.system(.caption, design: .serif))
                     .foregroundStyle(CloudTheme.muted)
             }
 
@@ -243,11 +243,11 @@ private struct PlaylistResultCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(playlist.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .font(.system(.subheadline, design: .serif).weight(.semibold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                 Text(playlist.user.username)
-                    .font(.system(.caption, design: .rounded))
+                    .font(.system(.caption, design: .serif))
                     .foregroundStyle(CloudTheme.muted)
             }
 
@@ -291,7 +291,7 @@ private struct UserResultCard: View {
             .clipShape(Circle())
 
             Text(user.username)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .font(.system(.subheadline, design: .serif).weight(.semibold))
                 .foregroundStyle(CloudTheme.ink)
 
             Spacer()
@@ -322,34 +322,32 @@ private struct UserProfileSheet: View {
     let onPlayTrack: (SCTrack) -> Void
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(profile.user.username)
-                            .font(.system(.title2, design: .rounded).weight(.bold))
-                        Text("Public Profile")
-                            .font(.system(.caption, design: .rounded))
-                            .foregroundStyle(CloudTheme.muted)
-                    }
-                    .cloudCard()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile.user.username)
+                        .font(.system(.title2, design: .serif).weight(.bold))
+                    Text("Public Profile")
+                        .font(.system(.caption, design: .serif))
+                        .foregroundStyle(CloudTheme.muted)
+                }
+                .cloudCard()
 
-                    Text("Tracks")
-                        .font(.system(.headline, design: .rounded).weight(.semibold))
-                    ForEach(profile.tracks.prefix(20)) { track in
-                        TrackResultCard(track: track) {
-                            onPlayTrack(track)
-                        }
-                    }
-
-                    Text("Playlists")
-                        .font(.system(.headline, design: .rounded).weight(.semibold))
-                    ForEach(profile.playlists.prefix(20)) { playlist in
-                        PlaylistResultCard(playlist: playlist, onOpen: nil)
+                Text("Tracks")
+                    .font(.system(.headline, design: .serif).weight(.bold))
+                ForEach(profile.tracks.prefix(20)) { track in
+                    TrackResultCard(track: track) {
+                        onPlayTrack(track)
                     }
                 }
-                .padding()
+
+                Text("Playlists")
+                    .font(.system(.headline, design: .serif).weight(.bold))
+                ForEach(profile.playlists.prefix(20)) { playlist in
+                    PlaylistResultCard(playlist: playlist, onOpen: nil)
+                }
             }
+            .padding()
         }
     }
 }
@@ -360,27 +358,25 @@ private struct PlaylistTracksSheet: View {
     let onPlayTrack: (SCTrack) -> Void
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Playlist Tracks")
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                        Spacer()
-                        Button("Play All", action: onPlayAll)
-                            .buttonStyle(PrimaryPillButtonStyle())
-                            .frame(maxWidth: 160)
-                    }
-                    .cloudCard()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Playlist Tracks")
+                        .font(.system(.title3, design: .serif).weight(.bold))
+                    Spacer()
+                    Button("Play All", action: onPlayAll)
+                        .buttonStyle(PrimaryPillButtonStyle())
+                        .frame(maxWidth: 160)
+                }
+                .cloudCard()
 
-                    ForEach(tracks) { track in
-                        TrackResultCard(track: track) {
-                            onPlayTrack(track)
-                        }
+                ForEach(tracks) { track in
+                    TrackResultCard(track: track) {
+                        onPlayTrack(track)
                     }
                 }
-                .padding()
             }
+            .padding()
         }
     }
 }

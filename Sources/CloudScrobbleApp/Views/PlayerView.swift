@@ -21,7 +21,7 @@ struct PlayerView: View {
     private var nowPlayingCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Now Playing")
-                .font(.system(.headline, design: .rounded).weight(.semibold))
+                .font(.system(.headline, design: .serif).weight(.bold))
                 .foregroundStyle(CloudTheme.ink)
 
             switch controller.phase {
@@ -36,13 +36,13 @@ struct PlayerView: View {
                     ProgressView()
                         .tint(CloudTheme.sky)
                     Text("Loading stream…")
-                        .font(.system(.subheadline, design: .rounded))
+                        .font(.system(.subheadline, design: .serif))
                         .foregroundStyle(CloudTheme.muted)
                 }
                 .padding(4)
             case .failed(let message):
                 Text(message)
-                    .font(.system(.subheadline, design: .rounded))
+                    .font(.system(.subheadline, design: .serif))
                     .foregroundStyle(CloudTheme.warning)
             case .playing(let item), .paused(let item):
                 HStack(spacing: 12) {
@@ -50,14 +50,14 @@ struct PlayerView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.title)
-                            .font(.system(.headline, design: .rounded).weight(.semibold))
+                            .font(.system(.headline, design: .serif).weight(.bold))
                             .foregroundStyle(CloudTheme.ink)
                             .lineLimit(2)
                         Text(item.artistDisplay)
-                            .font(.system(.caption, design: .rounded))
+                            .font(.system(.caption, design: .serif))
                             .foregroundStyle(CloudTheme.muted)
                         Text("Elapsed \(Int(controller.elapsedSeconds))s")
-                            .font(.system(.caption2, design: .rounded))
+                            .font(.system(.caption2, design: .serif))
                             .foregroundStyle(CloudTheme.muted)
                     }
                 }
@@ -82,29 +82,29 @@ struct PlayerView: View {
                 Image(systemName: "text.line.first.and.arrowtriangle.forward")
                     .foregroundStyle(CloudTheme.sky)
                 Text("Queue")
-                    .font(.system(.headline, design: .rounded).weight(.semibold))
+                    .font(.system(.headline, design: .serif).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
             }
 
             if controller.queue.isEmpty {
                 Text("Queue is empty")
-                    .font(.system(.caption, design: .rounded))
+                    .font(.system(.caption, design: .serif))
                     .foregroundStyle(CloudTheme.muted)
             } else {
                 ForEach(Array(controller.queue.enumerated()), id: \.element.id) { index, item in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.title)
-                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                .font(.system(.subheadline, design: .serif).weight(.semibold))
                                 .foregroundStyle(CloudTheme.ink)
                             Text(item.artistDisplay)
-                                .font(.system(.caption, design: .rounded))
+                                .font(.system(.caption, design: .serif))
                                 .foregroundStyle(CloudTheme.muted)
                         }
                         Spacer()
                         if controller.currentIndex == index {
                             Text("Current")
-                                .font(.system(.caption2, design: .rounded).weight(.bold))
+                                .font(.system(.caption2, design: .serif).weight(.bold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)
                                 .background(
@@ -129,7 +129,7 @@ struct PlayerView: View {
                 Text(controller.debugStatus)
                     .lineLimit(2)
             }
-            .font(.system(.caption, design: .rounded))
+            .font(.system(.caption, design: .serif))
             .foregroundStyle(CloudTheme.muted)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)

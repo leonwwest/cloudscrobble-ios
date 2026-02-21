@@ -61,6 +61,15 @@ export $(grep -v '^#' .env | xargs)
 go run .
 ```
 
+In a second terminal, verify credentials:
+```bash
+curl -X POST http://127.0.0.1:8787/oauth/soundcloud/client-credentials \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+Expected: JSON with `access_token`.  
+If you get `{"error":"invalid_client"}`, your SoundCloud client id/secret pair is not valid.
+
 ### Start app
 Preferred: run the iOS Xcode target.
 
@@ -83,7 +92,9 @@ Alternative (desktop SwiftPM executable):
 ## 5) Manual acceptance checklist
 
 1. Connect SoundCloud in app.
-   - If login stays white, use `Use SoundCloud Public Mode` to continue testing search/playback.
+   - Login now runs in `ASWebAuthenticationSession`.
+   - If login stays white, first fix `invalid_client` in broker test above.
+   - If SoundCloud page itself is still white, use `Use SoundCloud Public Mode` to continue testing search/playback.
 2. Search tracks.
 3. Open public profile + playlists.
 4. Play track (AVPlayer starts HLS stream).
