@@ -115,10 +115,17 @@ public actor LastFMScrobbleService: LastFMScrobbleSending {
                 .utf8
         )
 
-        let response = try await httpClient.send(request)
-
-        if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: response.data) {
-            throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+        do {
+            let response = try await httpClient.send(request)
+            if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: response.data) {
+                throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+            }
+        } catch CloudScrobbleError.httpStatus(_, let data) {
+            guard let data else { throw CloudScrobbleError.invalidResponse }
+            if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: data) {
+                throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+            }
+            throw CloudScrobbleError.invalidResponse
         }
     }
 

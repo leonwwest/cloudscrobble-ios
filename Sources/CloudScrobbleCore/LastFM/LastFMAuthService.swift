@@ -93,13 +93,23 @@ public actor LastFMAuthService: LastFMAuthenticating {
         let body = bodyParams
             .sorted { $0.key < $1.key }
             .map { key, value in
-                "\(key)=\(value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value)"
+                "\(key)=\(Self.formURLEncode(value))"
             }
             .joined(separator: "&")
 
         request.httpBody = Data(body.utf8)
 
-        let response = try await httpClient.send(request)
-        return response.data
+        do {
+            let response = try await httpClient.send(request)
+            return response.data
+        } catch CloudScrobbleError.httpStatus(_, let data) {
+            guard let data else { throw CloudScrobbleError.invalidResponse }
+            return data
+        }
+    }
+
+    private static func formURLEncode(_ input: String) -> String {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return input.addingPercentEncoding(withAllowedCharacters: allowed) ?? input
     }
 }
