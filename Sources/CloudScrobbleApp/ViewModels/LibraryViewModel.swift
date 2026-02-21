@@ -21,7 +21,7 @@ final class LibraryViewModel: ObservableObject {
             errorMessage = "Connect SoundCloud first"
             return
         }
-        if session.soundCloudPublicMode {
+        if session.soundCloudPublicMode && !session.soundCloudMockMode {
             me = nil
             myPlaylists = []
             myLikedTracks = []

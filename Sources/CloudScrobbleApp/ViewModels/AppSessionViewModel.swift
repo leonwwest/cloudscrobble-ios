@@ -1,8 +1,5 @@
 import CloudScrobbleCore
 import Foundation
-#if canImport(AuthenticationServices)
-import AuthenticationServices
-#endif
 
 actor MutableLastFMScrobbler: LastFMScrobbleSending {
     var wrapped: LastFMScrobbleSending?
@@ -46,6 +43,7 @@ final class AppSessionViewModel: ObservableObject {
 
     @Published var soundCloudConnected = false
     @Published var soundCloudPublicMode = false
+    @Published var soundCloudMockMode = false
     @Published var lastFMConnected = false
     @Published var isBusy = false
     @Published var statusMessage: String?
@@ -56,8 +54,12 @@ final class AppSessionViewModel: ObservableObject {
     private let browserClient = SystemBrowserClient()
 
     private let soundCloudAuthService: SoundCloudAuthService?
-    private let soundCloudAPIClient: SoundCloudAPIClient?
-    private let playbackResolver: PlaybackResolver?
+    private let realSoundCloudAPIClient: SoundCloudAPIClient?
+    private let realPlaybackResolver: PlaybackResolver?
+    private let mockSoundCloudAPIClient: MockSoundCloudAPIClient
+    private let mockPlaybackResolver: PlaybackResolver
+    private var activeSoundCloudAPIClient: SoundCloudAPIClienting?
+    private var activePlaybackResolver: PlaybackResolving?
 
     private let lastFMAuthService: LastFMAuthService?
     private let lastFMScrobbleService: LastFMScrobbleService?
@@ -68,6 +70,9 @@ final class AppSessionViewModel: ObservableObject {
         self.config = config
 
         let keychain = KeychainStore(service: "com.cloudscrobble.private")
+        let mockSoundCloudAPIClient = MockSoundCloudAPIClient()
+        self.mockSoundCloudAPIClient = mockSoundCloudAPIClient
+        self.mockPlaybackResolver = PlaybackResolver(api: mockSoundCloudAPIClient)
 
         if let config {
             let soundCloudAuthService = SoundCloudAuthService(
@@ -93,26 +98,29 @@ final class AppSessionViewModel: ObservableObject {
             )
 
             self.soundCloudAuthService = soundCloudAuthService
-            self.soundCloudAPIClient = soundCloudAPIClient
-            self.playbackResolver = playbackResolver
+            self.realSoundCloudAPIClient = soundCloudAPIClient
+            self.realPlaybackResolver = playbackResolver
             self.lastFMAuthService = lastFMAuthService
             self.lastFMScrobbleService = lastFMScrobbleService
 
             self.mutableScrobbler = MutableLastFMScrobbler(wrapped: lastFMScrobbleService)
         } else {
             self.soundCloudAuthService = nil
-            self.soundCloudAPIClient = nil
-            self.playbackResolver = nil
+            self.realSoundCloudAPIClient = nil
+            self.realPlaybackResolver = nil
             self.lastFMAuthService = nil
             self.lastFMScrobbleService = nil
             self.mutableScrobbler = MutableLastFMScrobbler(wrapped: nil)
             let missing = AppConfig.missingEnvironmentKeys()
             if missing.isEmpty {
-                statusMessage = "Missing app configuration. Ensure env vars are set in the Xcode scheme."
+                statusMessage = "Missing app configuration. Demo Mode can still be used without SoundCloud API."
             } else {
-                statusMessage = "Missing scheme env vars: \(missing.joined(separator: ", "))"
+                statusMessage = "Missing scheme env vars: \(missing.joined(separator: ", ")). Demo Mode is available."
             }
         }
+
+        self.activeSoundCloudAPIClient = nil
+        self.activePlaybackResolver = nil
 
         playerController = PlayerScrobbleController(lastFMScrobbler: mutableScrobbler)
 
@@ -126,21 +134,26 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     var apiClient: SoundCloudAPIClienting? {
-        soundCloudAPIClient
+        guard soundCloudConnected else { return nil }
+        return activeSoundCloudAPIClient
     }
 
     func refreshConnectionState() async {
-        guard let soundCloudAuthService, let lastFMAuthService else {
-            soundCloudConnected = false
-            lastFMConnected = false
-            return
+        if soundCloudMockMode {
+            activateMockMode()
+        } else if let soundCloudAuthService {
+            if let token = await soundCloudAuthService.cachedToken() {
+                activateRealMode(isPublicMode: token.refreshToken == nil)
+            } else {
+                deactivateSoundCloudMode()
+            }
+        } else {
+            deactivateSoundCloudMode()
         }
 
-        soundCloudConnected = await soundCloudAuthService.cachedToken() != nil
-        if let token = await soundCloudAuthService.cachedToken() {
-            soundCloudPublicMode = token.refreshToken == nil
-        } else {
-            soundCloudPublicMode = false
+        guard let lastFMAuthService else {
+            lastFMConnected = false
+            return
         }
         lastFMConnected = await lastFMAuthService.cachedSession() != nil
     }
@@ -177,18 +190,9 @@ final class AppSessionViewModel: ObservableObject {
                 redirectURI: config.soundCloudRedirectURI
             )
 
-            let callbackScheme = try callbackScheme(from: config.soundCloudRedirectURI)
-
-#if canImport(AuthenticationServices) && canImport(UIKit)
-            let callbackURL = try await browserClient.authenticate(
-                url: authURL,
-                callbackScheme: callbackScheme
-            )
-            await handleIncomingOAuthCallback(callbackURL)
-#else
+            _ = try callbackScheme(from: config.soundCloudRedirectURI)
             try browserClient.open(url: authURL)
             statusMessage = "Continue SoundCloud login in browser and return to the app."
-#endif
         } catch {
             pendingSoundCloudAuthorization = nil
             statusMessage = normalizedAuthErrorMessage(error)
@@ -196,7 +200,7 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func connectSoundCloudPublicMode() async {
-        guard let soundCloudAuthService else {
+        guard let soundCloudAuthService, realSoundCloudAPIClient != nil, realPlaybackResolver != nil else {
             statusMessage = "Missing app configuration. Fill .env values first."
             return
         }
@@ -207,12 +211,17 @@ final class AppSessionViewModel: ObservableObject {
         do {
             _ = try await soundCloudAuthService.fetchClientCredentialsToken()
             pendingSoundCloudAuthorization = nil
-            soundCloudConnected = true
-            soundCloudPublicMode = true
+            activateRealMode(isPublicMode: true)
             statusMessage = "SoundCloud connected in Public Mode (no /me library)."
         } catch {
             statusMessage = "Public Mode connection failed: \(error.localizedDescription)"
         }
+    }
+
+    func connectSoundCloudDemoMode() async {
+        pendingSoundCloudAuthorization = nil
+        activateMockMode()
+        statusMessage = "Demo Mode enabled: local mock catalog + test stream are active."
     }
 
     func handleIncomingOAuthCallback(_ url: URL) async {
@@ -250,8 +259,7 @@ final class AppSessionViewModel: ObservableObject {
             )
 
             pendingSoundCloudAuthorization = nil
-            soundCloudConnected = true
-            soundCloudPublicMode = false
+            activateRealMode(isPublicMode: false)
             statusMessage = "SoundCloud connected"
         } catch {
             pendingSoundCloudAuthorization = nil
@@ -280,10 +288,11 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func disconnectSoundCloud() async {
-        guard let soundCloudAuthService else { return }
-        try? await soundCloudAuthService.clearCachedToken()
-        soundCloudConnected = false
-        soundCloudPublicMode = false
+        if let soundCloudAuthService {
+            try? await soundCloudAuthService.clearCachedToken()
+        }
+        pendingSoundCloudAuthorization = nil
+        deactivateSoundCloudMode()
     }
 
     func disconnectLastFM() async {
@@ -293,7 +302,7 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
-        guard let playbackResolver else {
+        guard let playbackResolver = activePlaybackResolver else {
             statusMessage = "Playback resolver unavailable"
             return
         }
@@ -319,7 +328,7 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(tracks: [SCTrack], startAt: Int = 0) async {
-        guard let playbackResolver else {
+        guard let playbackResolver = activePlaybackResolver else {
             statusMessage = "Playback resolver unavailable"
             return
         }
@@ -380,13 +389,39 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     private func normalizedAuthErrorMessage(_ error: Error) -> String {
-#if canImport(AuthenticationServices)
         let nsError = error as NSError
-        if nsError.domain == ASWebAuthenticationSessionError.errorDomain,
-           nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
             return "SoundCloud login canceled."
         }
-#endif
         return "SoundCloud login failed: \(error.localizedDescription)"
+    }
+
+    private func activateRealMode(isPublicMode: Bool) {
+        guard let realSoundCloudAPIClient, let realPlaybackResolver else {
+            deactivateSoundCloudMode()
+            return
+        }
+
+        activeSoundCloudAPIClient = realSoundCloudAPIClient
+        activePlaybackResolver = realPlaybackResolver
+        soundCloudConnected = true
+        soundCloudPublicMode = isPublicMode
+        soundCloudMockMode = false
+    }
+
+    private func activateMockMode() {
+        activeSoundCloudAPIClient = mockSoundCloudAPIClient
+        activePlaybackResolver = mockPlaybackResolver
+        soundCloudConnected = true
+        soundCloudPublicMode = false
+        soundCloudMockMode = true
+    }
+
+    private func deactivateSoundCloudMode() {
+        activeSoundCloudAPIClient = nil
+        activePlaybackResolver = nil
+        soundCloudConnected = false
+        soundCloudPublicMode = false
+        soundCloudMockMode = false
     }
 }

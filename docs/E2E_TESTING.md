@@ -92,9 +92,9 @@ Alternative (desktop SwiftPM executable):
 ## 5) Manual acceptance checklist
 
 1. Connect SoundCloud in app.
-   - Login now runs in `ASWebAuthenticationSession`.
+   - Login opens in the system browser and returns via deep-link callback.
    - If login stays white, first fix `invalid_client` in broker test above.
-   - If SoundCloud page itself is still white, use `Use SoundCloud Public Mode` to continue testing search/playback.
+   - If SoundCloud page itself is still white, use `Use SoundCloud Public Mode` or `Use Demo Mode` to continue testing search/playback.
 2. Search tracks.
 3. Open public profile + playlists.
 4. Play track (AVPlayer starts HLS stream).

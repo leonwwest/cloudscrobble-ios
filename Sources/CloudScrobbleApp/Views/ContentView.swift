@@ -30,11 +30,12 @@ struct ContentView: View {
                     .opacity(deckVisible ? 1 : 0)
                     .offset(y: deckVisible ? 0 : -10)
             }
-            .safeAreaInset(edge: .bottom, spacing: 10) {
+            .overlay(alignment: .top) {
                 if let statusMessage = session.statusMessage {
                     statusToast(message: statusMessage)
                         .padding(.horizontal, 16)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.top, 190)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                         .allowsHitTesting(false)
                 }
             }
@@ -78,12 +79,18 @@ struct ContentView: View {
             }
 
             HStack(spacing: 10) {
-                StatusBadge(title: "SoundCloud", isConnected: session.soundCloudConnected)
+                StatusBadge(title: session.soundCloudMockMode ? "SoundCloud Demo" : "SoundCloud", isConnected: session.soundCloudConnected)
                 StatusBadge(title: "Last.fm", isConnected: session.lastFMConnected)
             }
 
             if session.soundCloudConnected && session.soundCloudPublicMode {
                 Text("Public Mode active: search/playback enabled, private /me endpoints disabled.")
+                    .font(.system(.caption2, design: .serif))
+                    .foregroundStyle(CloudTheme.muted)
+            }
+
+            if session.soundCloudConnected && session.soundCloudMockMode {
+                Text("Demo Mode active: local mock catalog + test HLS stream. No SoundCloud API required.")
                     .font(.system(.caption2, design: .serif))
                     .foregroundStyle(CloudTheme.muted)
             }
@@ -113,10 +120,17 @@ struct ContentView: View {
             }
 
             if !session.soundCloudConnected {
-                Button("Use SoundCloud Public Mode") {
-                    Task { await session.connectSoundCloudPublicMode() }
+                HStack(spacing: 8) {
+                    Button("Use SoundCloud Public Mode") {
+                        Task { await session.connectSoundCloudPublicMode() }
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+
+                    Button("Use Demo Mode") {
+                        Task { await session.connectSoundCloudDemoMode() }
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
                 }
-                .buttonStyle(SecondaryPillButtonStyle())
             }
 
             if !session.isConfigured {
