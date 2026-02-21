@@ -303,7 +303,7 @@ final class AppSessionViewModel: ObservableObject {
         if let authError = error as? ASWebAuthenticationSessionError {
             switch authError.code {
             case .canceledLogin:
-                return "Login was canceled."
+                return "Login was canceled. If the SoundCloud page is blank, disable macOS Auto Proxy Discovery and retry (or use another simulator runtime)."
             case .presentationContextInvalid:
                 return "Invalid auth presentation context. Restart the app and try again."
             case .presentationContextNotProvided:

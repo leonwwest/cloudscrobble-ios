@@ -34,6 +34,7 @@ struct ContentView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                        .allowsHitTesting(false)
                 )
                 .shadow(color: .black.opacity(0.14), radius: 20, x: 0, y: 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -134,6 +135,7 @@ struct ContentView: View {
                         )
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
+                .allowsHitTesting(false)
             }
         }
         .cloudCard()

@@ -46,10 +46,21 @@ final class WebAuthenticationSessionClient: NSObject {
 extension WebAuthenticationSessionClient: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
 #if canImport(UIKit)
-        return UIApplication.shared.connectedScenes
+        let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
             .flatMap(\.windows)
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+            .filter { !$0.isHidden }
+
+        if let keyWindow = windows.first(where: \.isKeyWindow) {
+            return keyWindow
+        }
+
+        if let largestWindow = windows.max(by: { ($0.bounds.width * $0.bounds.height) < ($1.bounds.width * $1.bounds.height) }) {
+            return largestWindow
+        }
+
+        return ASPresentationAnchor()
 #elseif canImport(AppKit)
         return NSApplication.shared.keyWindow ?? ASPresentationAnchor()
 #else
