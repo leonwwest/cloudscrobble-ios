@@ -48,6 +48,7 @@ public actor SoundCloudAuthService: SoundCloudAuthProviding {
             URLQueryItem(name: "scope", value: config.defaultScopes.joined(separator: " ")),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
+            URLQueryItem(name: "display", value: "popup"),
             URLQueryItem(name: "state", value: state)
         ]
 

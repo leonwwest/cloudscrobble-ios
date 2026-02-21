@@ -1,4 +1,3 @@
-import AuthenticationServices
 import CloudScrobbleCore
 import Foundation
 
@@ -36,6 +35,12 @@ actor MutableLastFMScrobbler: LastFMScrobbleSending {
 
 @MainActor
 final class AppSessionViewModel: ObservableObject {
+    private struct PendingSoundCloudAuthorization {
+        let state: String
+        let codeVerifier: String
+        let redirectURI: String
+    }
+
     @Published var soundCloudConnected = false
     @Published var lastFMConnected = false
     @Published var isBusy = false
@@ -44,7 +49,7 @@ final class AppSessionViewModel: ObservableObject {
     let playerController: PlayerScrobbleController
 
     private(set) var config: AppConfig?
-    private let webAuthClient = WebAuthenticationSessionClient()
+    private let browserClient = SystemBrowserClient()
 
     private let soundCloudAuthService: SoundCloudAuthService?
     private let soundCloudAPIClient: SoundCloudAPIClient?
@@ -53,6 +58,7 @@ final class AppSessionViewModel: ObservableObject {
     private let lastFMAuthService: LastFMAuthService?
     private let lastFMScrobbleService: LastFMScrobbleService?
     private let mutableScrobbler: MutableLastFMScrobbler
+    private var pendingSoundCloudAuthorization: PendingSoundCloudAuthorization?
 
     init(config: AppConfig? = AppConfig.loadFromEnvironment()) {
         self.config = config
@@ -156,27 +162,60 @@ final class AppSessionViewModel: ObservableObject {
                 redirectURI: config.soundCloudRedirectURI
             )
 
-            let callbackScheme = try callbackScheme(from: config.soundCloudRedirectURI)
-            let callbackURL = try await webAuthClient.authenticate(url: authURL, callbackScheme: callbackScheme)
-            let query = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            pendingSoundCloudAuthorization = PendingSoundCloudAuthorization(
+                state: state,
+                codeVerifier: pkce.codeVerifier,
+                redirectURI: config.soundCloudRedirectURI
+            )
 
-            guard query.first(where: { $0.name == "state" })?.value == state else {
+            try browserClient.open(url: authURL)
+            statusMessage = "Continue SoundCloud login in browser and return to the app."
+        } catch {
+            pendingSoundCloudAuthorization = nil
+            statusMessage = "SoundCloud login failed: \(error.localizedDescription)"
+        }
+    }
+
+    func handleIncomingOAuthCallback(_ url: URL) async {
+        guard let soundCloudAuthService, let pending = pendingSoundCloudAuthorization else {
+            return
+        }
+
+        do {
+            let expectedScheme = try callbackScheme(from: pending.redirectURI)
+            guard url.scheme?.lowercased() == expectedScheme.lowercased() else {
+                return
+            }
+
+            let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            if let oauthError = queryItems.first(where: { $0.name == "error" })?.value {
+                pendingSoundCloudAuthorization = nil
+                statusMessage = "SoundCloud authorization failed: \(oauthError)"
+                return
+            }
+
+            guard queryItems.first(where: { $0.name == "state" })?.value == pending.state else {
+                pendingSoundCloudAuthorization = nil
                 throw CloudScrobbleError.oauthStateMismatch
             }
-            guard let code = query.first(where: { $0.name == "code" })?.value else {
+
+            guard let code = queryItems.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+                pendingSoundCloudAuthorization = nil
                 throw CloudScrobbleError.oauthCallbackMissingCode
             }
 
             _ = try await soundCloudAuthService.exchangeAuthorizationCode(
                 code,
-                codeVerifier: pkce.codeVerifier,
-                redirectURI: config.soundCloudRedirectURI
+                codeVerifier: pending.codeVerifier,
+                redirectURI: pending.redirectURI
             )
 
+            pendingSoundCloudAuthorization = nil
             soundCloudConnected = true
             statusMessage = "SoundCloud connected"
         } catch {
-            statusMessage = "SoundCloud login failed: \(friendlySoundCloudAuthError(error))"
+            pendingSoundCloudAuthorization = nil
+            statusMessage = "SoundCloud callback failed: \(error.localizedDescription)"
         }
     }
 
@@ -297,22 +336,5 @@ final class AppSessionViewModel: ObservableObject {
                 "Missing URL scheme \(scheme). Register it in Info.plist CFBundleURLTypes."
             )
         }
-    }
-
-    private func friendlySoundCloudAuthError(_ error: Error) -> String {
-        if let authError = error as? ASWebAuthenticationSessionError {
-            switch authError.code {
-            case .canceledLogin:
-                return "Login was canceled. If the SoundCloud page is blank, disable macOS Auto Proxy Discovery and retry (or use another simulator runtime)."
-            case .presentationContextInvalid:
-                return "Invalid auth presentation context. Restart the app and try again."
-            case .presentationContextNotProvided:
-                return "Auth presentation context not provided."
-            @unknown default:
-                return authError.localizedDescription
-            }
-        }
-
-        return error.localizedDescription
     }
 }

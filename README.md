@@ -81,6 +81,7 @@ If "Connect SoundCloud" fails in-app, verify:
 3. Xcode scheme env vars are synced (run `./scripts/sync_env_to_xcode_scheme.sh`).
 4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
 5. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
+6. Current app flow opens SoundCloud login in the system browser and returns to app via `cloudscrobble://oauth`.
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`

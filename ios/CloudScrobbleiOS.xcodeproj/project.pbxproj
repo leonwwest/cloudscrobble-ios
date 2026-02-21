@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 421CA9E7D7C63273891A7A09 /* ContentView.swift */; };
 		093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB5DB08037BF4EF1CF0F9B9 /* AppSessionViewModel.swift */; };
-		2209B1752C76D25770D05F1E /* WebAuthenticationSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A15CC3720A4139825BDDDD /* WebAuthenticationSessionClient.swift */; };
 		5ED8CE2C14E39498DC319917 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */; };
 		6FADA9730E06C31B6030E46B /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592DE3C63ECD225471E2D8B /* LibraryView.swift */; };
+		8B51A62405A2A6E69D2CDACE /* SystemBrowserClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */; };
 		8FC9CC9238F2497759F78F97 /* CloudScrobbleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8A1DF5D797BE565A7EBBB2DB /* CloudScrobbleCore */; };
 		A14FD17852DD568885D94287 /* CloudScrobbleApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1254B5DAE487E6A56217C1F /* CloudScrobbleApplication.swift */; };
 		ABCF9277938E5E472C8E50E1 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1163495C1B831CFB2412ED /* DesignSystem.swift */; };
@@ -22,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemBrowserClient.swift; sourceTree = "<group>"; };
 		421CA9E7D7C63273891A7A09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7FBFAE71534475A1934D4817 /* CloudScrobble */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudScrobble; path = ..; sourceTree = SOURCE_ROOT; };
 		8C6076FD6F46BF4FD6068665 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
@@ -31,7 +32,6 @@
 		D873D7E28C58F9186F3E9D67 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		D8C90D644D8C46863EDDD3CB /* CloudScrobbleiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CloudScrobbleiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1254B5DAE487E6A56217C1F /* CloudScrobbleApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudScrobbleApplication.swift; sourceTree = "<group>"; };
-		E1A15CC3720A4139825BDDDD /* WebAuthenticationSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthenticationSessionClient.swift; sourceTree = "<group>"; };
 		E5618EE12101A75D1DB95E9F /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		E592DE3C63ECD225471E2D8B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		ECB5DB08037BF4EF1CF0F9B9 /* AppSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionViewModel.swift; sourceTree = "<group>"; };
@@ -88,7 +88,7 @@
 		60ABE1AEEAA8BD76B654D654 /* OAuth */ = {
 			isa = PBXGroup;
 			children = (
-				E1A15CC3720A4139825BDDDD /* WebAuthenticationSessionClient.swift */,
+				1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */,
 			);
 			path = OAuth;
 			sourceTree = "<group>";
@@ -209,7 +209,7 @@
 				C05CE3F7D8900CC1AABAD203 /* PlayerView.swift in Sources */,
 				BCB1BB4BF8FEFD8D347000F9 /* SearchView.swift in Sources */,
 				E72767001D737592D1684BE1 /* SearchViewModel.swift in Sources */,
-				2209B1752C76D25770D05F1E /* WebAuthenticationSessionClient.swift in Sources */,
+				8B51A62405A2A6E69D2CDACE /* SystemBrowserClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

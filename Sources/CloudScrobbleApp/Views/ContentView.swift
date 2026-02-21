@@ -6,15 +6,20 @@ struct ContentView: View {
     @State private var lastFMUsername = ""
     @State private var lastFMPassword = ""
     @State private var headerVisible = false
+    @State private var showLastFMCredentials = false
 
     var body: some View {
         ZStack {
             CloudBackdrop()
 
             VStack(spacing: 14) {
-                headerCard
-                    .opacity(headerVisible ? 1 : 0)
-                    .offset(y: headerVisible ? 0 : 12)
+                ScrollView(.vertical, showsIndicators: false) {
+                    headerCard
+                        .opacity(headerVisible ? 1 : 0)
+                        .offset(y: headerVisible ? 0 : 12)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: 360)
 
                 TabView {
                     SearchView(viewModel: SearchViewModel(session: session))
@@ -47,6 +52,11 @@ struct ContentView: View {
         .onAppear {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
                 headerVisible = true
+            }
+        }
+        .onOpenURL { url in
+            Task {
+                await session.handleIncomingOAuthCallback(url)
             }
         }
     }
@@ -87,20 +97,30 @@ struct ContentView: View {
             }
             .buttonStyle(PrimaryPillButtonStyle())
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Last.fm Credentials")
-                    .font(.system(.caption, design: .rounded).weight(.bold))
-                    .foregroundStyle(CloudTheme.muted)
+            VStack(alignment: .leading, spacing: 10) {
+                Button(showLastFMCredentials ? "Hide Last.fm Credentials" : "Show Last.fm Credentials") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showLastFMCredentials.toggle()
+                    }
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        usernameField
-                        passwordField
+                if showLastFMCredentials {
+                    Text("Last.fm Credentials")
+                        .font(.system(.caption, design: .rounded).weight(.bold))
+                        .foregroundStyle(CloudTheme.muted)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            usernameField
+                            passwordField
+                        }
+                        VStack(spacing: 8) {
+                            usernameField
+                            passwordField
+                        }
                     }
-                    VStack(spacing: 8) {
-                        usernameField
-                        passwordField
-                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 Button(session.lastFMConnected ? "Disconnect Last.fm" : "Connect Last.fm") {
@@ -122,7 +142,7 @@ struct ContentView: View {
                     Text(statusMessage)
                         .font(.system(.caption, design: .rounded))
                         .foregroundStyle(CloudTheme.ink)
-                        .lineLimit(3)
+                        .lineLimit(2)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
