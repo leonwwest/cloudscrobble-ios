@@ -42,6 +42,7 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     @Published var soundCloudConnected = false
+    @Published var soundCloudPublicMode = false
     @Published var lastFMConnected = false
     @Published var isBusy = false
     @Published var statusMessage: String?
@@ -133,6 +134,11 @@ final class AppSessionViewModel: ObservableObject {
         }
 
         soundCloudConnected = await soundCloudAuthService.cachedToken() != nil
+        if let token = await soundCloudAuthService.cachedToken() {
+            soundCloudPublicMode = token.refreshToken == nil
+        } else {
+            soundCloudPublicMode = false
+        }
         lastFMConnected = await lastFMAuthService.cachedSession() != nil
     }
 
@@ -176,6 +182,26 @@ final class AppSessionViewModel: ObservableObject {
         }
     }
 
+    func connectSoundCloudPublicMode() async {
+        guard let soundCloudAuthService else {
+            statusMessage = "Missing app configuration. Fill .env values first."
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            _ = try await soundCloudAuthService.fetchClientCredentialsToken()
+            pendingSoundCloudAuthorization = nil
+            soundCloudConnected = true
+            soundCloudPublicMode = true
+            statusMessage = "SoundCloud connected in Public Mode (no /me library)."
+        } catch {
+            statusMessage = "Public Mode connection failed: \(error.localizedDescription)"
+        }
+    }
+
     func handleIncomingOAuthCallback(_ url: URL) async {
         guard let soundCloudAuthService, let pending = pendingSoundCloudAuthorization else {
             return
@@ -212,6 +238,7 @@ final class AppSessionViewModel: ObservableObject {
 
             pendingSoundCloudAuthorization = nil
             soundCloudConnected = true
+            soundCloudPublicMode = false
             statusMessage = "SoundCloud connected"
         } catch {
             pendingSoundCloudAuthorization = nil
@@ -243,6 +270,7 @@ final class AppSessionViewModel: ObservableObject {
         guard let soundCloudAuthService else { return }
         try? await soundCloudAuthService.clearCachedToken()
         soundCloudConnected = false
+        soundCloudPublicMode = false
     }
 
     func disconnectLastFM() async {

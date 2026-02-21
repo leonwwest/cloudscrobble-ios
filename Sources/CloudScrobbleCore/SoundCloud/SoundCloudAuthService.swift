@@ -81,6 +81,13 @@ public actor SoundCloudAuthService: SoundCloudAuthProviding {
         return token
     }
 
+    public func fetchClientCredentialsToken() async throws -> SoundCloudToken {
+        let endpoint = config.tokenBrokerBaseURL.appending(path: "oauth/soundcloud/client-credentials")
+        let token: SoundCloudToken = try await postJSON(to: endpoint, body: [String: String]())
+        try await setCachedToken(token)
+        return token
+    }
+
     public func cachedToken() async -> SoundCloudToken? {
         if let inMemoryToken {
             return inMemoryToken

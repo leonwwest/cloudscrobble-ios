@@ -22,6 +22,7 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
 - `backend/` (Go token broker)
   - `POST /oauth/soundcloud/exchange`
   - `POST /oauth/soundcloud/refresh`
+  - `POST /oauth/soundcloud/client-credentials`
   - `GET /healthz`
 
 ## Repo structure
@@ -82,6 +83,7 @@ If "Connect SoundCloud" fails in-app, verify:
 4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
 5. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
 6. Current app flow opens SoundCloud login in the system browser and returns to app via `cloudscrobble://oauth`.
+7. Fallback for testing: use `Use SoundCloud Public Mode` in-app (search/playback works, `/me` library stays unavailable).
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`

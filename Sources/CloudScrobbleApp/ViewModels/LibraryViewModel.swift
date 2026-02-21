@@ -21,6 +21,14 @@ final class LibraryViewModel: ObservableObject {
             errorMessage = "Connect SoundCloud first"
             return
         }
+        if session.soundCloudPublicMode {
+            me = nil
+            myPlaylists = []
+            myLikedTracks = []
+            myLikedPlaylists = []
+            errorMessage = "Public Mode has no private /me library. Use full SoundCloud login for this tab."
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }

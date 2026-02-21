@@ -86,6 +86,12 @@ struct ContentView: View {
                 StatusBadge(title: "Last.fm", isConnected: session.lastFMConnected)
             }
 
+            if session.soundCloudConnected && session.soundCloudPublicMode {
+                Text("Public Mode active: search/playback works, private /me library is disabled.")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(CloudTheme.muted)
+            }
+
             Button(session.soundCloudConnected ? "Disconnect SoundCloud" : "Connect SoundCloud") {
                 Task {
                     if session.soundCloudConnected {
@@ -96,6 +102,15 @@ struct ContentView: View {
                 }
             }
             .buttonStyle(PrimaryPillButtonStyle())
+
+            if !session.soundCloudConnected {
+                Button("Use SoundCloud Public Mode") {
+                    Task {
+                        await session.connectSoundCloudPublicMode()
+                    }
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 Button(showLastFMCredentials ? "Hide Last.fm Credentials" : "Show Last.fm Credentials") {

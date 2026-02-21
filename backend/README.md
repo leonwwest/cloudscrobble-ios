@@ -5,6 +5,7 @@ Minimal backend for SoundCloud OAuth token exchange/refresh.
 ## Endpoints
 - `POST /oauth/soundcloud/exchange`
 - `POST /oauth/soundcloud/refresh`
+- `POST /oauth/soundcloud/client-credentials`
 - `GET /healthz`
 
 ## Run
@@ -29,3 +30,6 @@ go run .
   "refreshToken": "refresh_token"
 }
 ```
+
+## Client credentials payload
+No payload required (empty JSON body is fine).

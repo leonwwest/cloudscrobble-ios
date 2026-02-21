@@ -83,6 +83,7 @@ Alternative (desktop SwiftPM executable):
 ## 5) Manual acceptance checklist
 
 1. Connect SoundCloud in app.
+   - If login stays white, use `Use SoundCloud Public Mode` to continue testing search/playback.
 2. Search tracks.
 3. Open public profile + playlists.
 4. Play track (AVPlayer starts HLS stream).
