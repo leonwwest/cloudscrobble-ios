@@ -50,7 +50,12 @@ Run:
 This validates:
 - Swift core build + tests
 - Go backend build/tests
-- Token broker health and OAuth exchange/refresh path (mocked SoundCloud token upstream)
+- Token broker health and OAuth exchange/refresh/client-credentials path (mocked SoundCloud token upstream)
+
+Optional live SoundCloud integration test (requires valid credentials + running broker):
+```bash
+SOUNDCLOUD_LIVE_TESTS=1 swift test --filter SoundCloudLiveIntegrationTests
+```
 
 ## 4) Real API run (manual E2E)
 

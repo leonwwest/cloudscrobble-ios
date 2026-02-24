@@ -39,6 +39,15 @@ func main() {
 		log.Fatalf("config error: %v", err)
 	}
 
+	mux := newMux(cfg)
+
+	log.Printf("token broker listening on %s", cfg.Addr)
+	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func newMux(cfg config) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -112,10 +121,7 @@ func main() {
 		proxyTokenRequest(w, cfg, payload)
 	}))
 
-	log.Printf("token broker listening on %s", cfg.Addr)
-	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {
-		log.Fatal(err)
-	}
+	return mux
 }
 
 func loadConfig() (config, error) {

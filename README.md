@@ -59,6 +59,12 @@ swift test
 cd backend && go test ./...
 ```
 
+Optional live integration tests:
+```bash
+SOUNDCLOUD_LIVE_TESTS=1 swift test --filter SoundCloudLiveIntegrationTests
+LASTFM_LIVE_TESTS=1 swift test --filter LastFMLiveIntegrationTests
+```
+
 ## Run iOS app (Xcode target)
 ```bash
 open ios/CloudScrobbleiOS.xcodeproj

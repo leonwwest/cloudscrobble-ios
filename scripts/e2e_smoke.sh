@@ -46,6 +46,13 @@ class H(BaseHTTPRequestHandler):
                 'scope': 'non-expiring',
                 'expires_in': 3600,
             }
+        elif grant == 'client_credentials':
+            payload = {
+                'access_token': 'mock_public_access_token',
+                'token_type': 'bearer',
+                'scope': 'non-expiring',
+                'expires_in': 3600,
+            }
         else:
             self.send_response(400)
             self.send_header('Content-Type', 'application/json')
@@ -83,9 +90,11 @@ sleep 2
 HEALTH="$(curl -sf http://127.0.0.1:8791/healthz)"
 EXCHANGE="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/exchange -H 'Content-Type: application/json' -d '{"code":"auth_code","codeVerifier":"pkce_verifier","redirectUri":"cloudscrobble://oauth"}')"
 REFRESH="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"mock_refresh_token"}')"
+CLIENT_CREDENTIALS="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -d '{}')"
 
 echo "health: $HEALTH"
 echo "exchange: $EXCHANGE"
 echo "refresh: $REFRESH"
+echo "client_credentials: $CLIENT_CREDENTIALS"
 
 echo "==> Smoke tests passed"
