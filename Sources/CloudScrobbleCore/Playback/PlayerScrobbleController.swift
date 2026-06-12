@@ -93,9 +93,7 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
 
-        Task {
-            await rebuildPlayerQueue(startAt: prepared.startIndex)
-        }
+        rebuildPlayerQueue(startAt: prepared.startIndex)
     }
 
     public func toggleShuffle() {
@@ -111,24 +109,18 @@ public final class PlayerScrobbleController: ObservableObject {
             let remaining = orderedQueue.filter { $0.trackURN != current.trackURN }
             queue = [current] + remaining.shuffled()
             persistPlaybackSnapshot()
-            Task {
-                await rebuildPlayerQueue(startAt: 0)
-            }
+            rebuildPlayerQueue(startAt: 0)
         } else {
             queue = orderedQueue.isEmpty ? queue : orderedQueue
             let restoredIndex = queue.firstIndex(where: { $0.trackURN == current.trackURN }) ?? 0
             persistPlaybackSnapshot()
-            Task {
-                await rebuildPlayerQueue(startAt: restoredIndex)
-            }
+            rebuildPlayerQueue(startAt: restoredIndex)
         }
     }
 
     public func playQueueItem(at index: Int) {
         guard queue.indices.contains(index) else { return }
-        Task {
-            await rebuildPlayerQueue(startAt: index)
-        }
+        rebuildPlayerQueue(startAt: index)
     }
 
     public func cycleRepeatMode() {
@@ -226,16 +218,16 @@ public final class PlayerScrobbleController: ObservableObject {
         let nextIndex = currentIndex + 1
         guard queue.indices.contains(nextIndex) else {
             if repeatMode == .all {
-                Task { await rebuildPlayerQueue(startAt: 0) }
+                rebuildPlayerQueue(startAt: 0)
             }
             return
         }
-        Task {
-            player.advanceToNextItem()
-            await startTrackState(at: nextIndex, playbackRate: 1)
-            configureAudioSession()
-            player.play()
-        }
+
+        player.advanceToNextItem()
+        let events = startTrackState(at: nextIndex, playbackRate: 1)
+        configureAudioSession()
+        player.play()
+        dispatchLater(events)
     }
 
     public func previous() {
@@ -246,18 +238,17 @@ public final class PlayerScrobbleController: ObservableObject {
         } else {
             previousIndex = max(0, currentIndex - 1)
         }
-        Task {
-            await rebuildPlayerQueue(startAt: previousIndex)
-        }
+        rebuildPlayerQueue(startAt: previousIndex)
     }
 
-    private func rebuildPlayerQueue(startAt index: Int) async {
+    private func rebuildPlayerQueue(startAt index: Int) {
         guard queue.indices.contains(index) else { return }
 
         phase = .loading
 
         configureAudioSession()
         player.volume = 1
+        player.pause()
         player.removeAllItems()
 
         for item in queue[index...] {
@@ -267,12 +258,14 @@ public final class PlayerScrobbleController: ObservableObject {
             }
         }
 
-        await startTrackState(at: index, playbackRate: 1)
+        let events = startTrackState(at: index, playbackRate: 1)
         persistPlaybackSnapshot()
         player.play()
+        dispatchLater(events)
     }
 
-    private func startTrackState(at index: Int, playbackRate: Double) async {
+    @discardableResult
+    private func startTrackState(at index: Int, playbackRate: Double) -> [ScrobbleEngineEvent] {
         guard queue.indices.contains(index) else {
             scrobbleEngine.stop()
             phase = .idle
@@ -280,7 +273,7 @@ public final class PlayerScrobbleController: ObservableObject {
             elapsedSeconds = 0
             clearNowPlayingInfo()
             clearSavedPlaybackSnapshot()
-            return
+            return []
         }
 
         let item = queue[index]
@@ -294,7 +287,7 @@ public final class PlayerScrobbleController: ObservableObject {
         updateNowPlayingInfo(for: item, playbackRate: playbackRate)
         persistPlaybackSnapshot()
 
-        await dispatch(events: events)
+        return events
     }
 
     private func makePlayerItem(for item: QueueItem) -> AVPlayerItem {
@@ -328,7 +321,7 @@ public final class PlayerScrobbleController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.handleCurrentTrackEnded()
+                self?.handleCurrentTrackEnded()
             }
         }
     }
@@ -342,7 +335,7 @@ public final class PlayerScrobbleController: ObservableObject {
             let errorMessage = (notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error)?
                 .localizedDescription
             Task { @MainActor [weak self] in
-                await self?.handlePlaybackProblem(errorMessage: errorMessage)
+                self?.handlePlaybackProblem(errorMessage: errorMessage)
             }
         }
 
@@ -450,11 +443,11 @@ public final class PlayerScrobbleController: ObservableObject {
 #endif
     }
 
-    private func handleCurrentTrackEnded() async {
+    private func handleCurrentTrackEnded() {
         guard let finishedIndex = currentIndex else { return }
 
         if repeatMode == .one {
-            await rebuildPlayerQueue(startAt: finishedIndex)
+            rebuildPlayerQueue(startAt: finishedIndex)
             return
         }
 
@@ -462,7 +455,7 @@ public final class PlayerScrobbleController: ObservableObject {
 
         guard queue.indices.contains(nextIndex) else {
             if repeatMode == .all, !queue.isEmpty {
-                await rebuildPlayerQueue(startAt: 0)
+                rebuildPlayerQueue(startAt: 0)
                 return
             }
 
@@ -475,12 +468,13 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
 
-        await startTrackState(at: nextIndex, playbackRate: 1)
+        let events = startTrackState(at: nextIndex, playbackRate: 1)
         configureAudioSession()
         player.play()
+        dispatchLater(events)
     }
 
-    private func handlePlaybackProblem(errorMessage: String?) async {
+    private func handlePlaybackProblem(errorMessage: String?) {
         let failedTitle: String?
         if let currentIndex, queue.indices.contains(currentIndex) {
             failedTitle = queue[currentIndex].title
@@ -502,11 +496,12 @@ public final class PlayerScrobbleController: ObservableObject {
         let nextIndex = currentIndex + 1
         if queue.indices.contains(nextIndex) {
             player.advanceToNextItem()
-            await startTrackState(at: nextIndex, playbackRate: 1)
+            let events = startTrackState(at: nextIndex, playbackRate: 1)
             configureAudioSession()
             player.play()
+            dispatchLater(events)
         } else if repeatMode == .all, !queue.isEmpty {
-            await rebuildPlayerQueue(startAt: 0)
+            rebuildPlayerQueue(startAt: 0)
         } else {
             scrobbleEngine.stop()
             phase = .failed(errorMessage ?? "Track not playable.")
@@ -534,19 +529,19 @@ public final class PlayerScrobbleController: ObservableObject {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
             Task { @MainActor in
-                await self.handleTick(time: time.seconds)
+                self.handleTick(time: time.seconds)
             }
         }
     }
 
-    private func handleTick(time: TimeInterval) async {
+    private func handleTick(time: TimeInterval) {
         elapsedSeconds = max(0, time)
         if case .playing(let item) = phase {
             updateNowPlayingInfo(for: item, playbackRate: 1)
         }
         let events = scrobbleEngine.tick(playbackTime: elapsedSeconds)
         persistPlaybackSnapshot()
-        await dispatch(events: events)
+        dispatchLater(events)
     }
 
     private func configureRemoteCommands() {
@@ -673,7 +668,7 @@ public final class PlayerScrobbleController: ObservableObject {
                     return
                 }
 
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                let artwork = Self.makeNowPlayingArtwork(from: image)
                 await MainActor.run { [weak self] in
                     guard self?.nowPlayingArtworkTrackURN == trackURN,
                           self?.nowPlayingArtworkURL == artworkURL else {
@@ -693,6 +688,12 @@ public final class PlayerScrobbleController: ObservableObject {
         }
 #endif
     }
+
+#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
+    private nonisolated static func makeNowPlayingArtwork(from image: UIImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+    }
+#endif
 
     private func clearNowPlayingArtwork() {
 #if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
@@ -729,6 +730,13 @@ public final class PlayerScrobbleController: ObservableObject {
             } catch {
                 setDebugStatus("Scrobble error: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private func dispatchLater(_ events: [ScrobbleEngineEvent]) {
+        guard !events.isEmpty else { return }
+        Task { [weak self] in
+            await self?.dispatch(events: events)
         }
     }
 
