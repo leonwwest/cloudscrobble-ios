@@ -1,5 +1,8 @@
 import CloudScrobbleCore
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct SearchView: View {
     @StateObject var viewModel: SearchViewModel
@@ -217,6 +220,8 @@ struct SearchView: View {
 }
 
 private struct TrackResultCard: View {
+    @Environment(\.openURL) private var openURL
+
     let track: SCTrack
     let onPlay: () -> Void
     var onPlayNext: (() -> Void)?
@@ -251,28 +256,41 @@ private struct TrackResultCard: View {
 
             Spacer()
 
-            if let onPlayNext {
-                Button(action: onPlayNext) {
-                    Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CloudTheme.ink)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(CloudTheme.elevatedStrong))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Play next")
-            }
+            if hasMenuActions {
+                Menu {
+                    if let onPlayNext {
+                        Button(action: onPlayNext) {
+                            Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+                        }
+                    }
 
-            if let onAddToQueue {
-                Button(action: onAddToQueue) {
-                    Image(systemName: "text.badge.plus")
+                    if let onAddToQueue {
+                        Button(action: onAddToQueue) {
+                            Label("Add to Queue", systemImage: "text.badge.plus")
+                        }
+                    }
+
+                    if let permalinkURL = track.permalinkURL {
+                        Button {
+                            openURL(permalinkURL)
+                        } label: {
+                            Label("Open in SoundCloud", systemImage: "safari")
+                        }
+
+                        Button {
+                            copyToPasteboard(permalinkURL.absoluteString)
+                        } label: {
+                            Label("Copy Link", systemImage: "doc.on.doc")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(CloudTheme.ink)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(CloudTheme.elevatedStrong))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add to queue")
+                .accessibilityLabel("Track actions")
             }
 
             Button(action: onPlay) {
@@ -293,7 +311,17 @@ private struct TrackResultCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(CloudTheme.line, lineWidth: 1)
-        )
+            )
+    }
+
+    private var hasMenuActions: Bool {
+        onPlayNext != nil || onAddToQueue != nil || track.permalinkURL != nil
+    }
+
+    private func copyToPasteboard(_ text: String) {
+#if os(iOS)
+        UIPasteboard.general.string = text
+#endif
     }
 }
 
