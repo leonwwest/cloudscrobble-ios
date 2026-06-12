@@ -150,7 +150,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func open(playlist: SCPlaylist) async {
-        guard let session, let api = session.apiClient else {
+        guard let session else {
             errorMessage = "Connect SoundCloud first"
             return
         }
@@ -159,7 +159,7 @@ final class LibraryViewModel: ObservableObject {
         defer { isLoadingPlaylist = false }
 
         do {
-            let tracks = try await loadTracks(for: playlist, api: api)
+            let tracks = try await session.loadPlaylistTracks(for: playlist)
             selectedPlaylist = PlaylistTracksData(playlist: playlist, tracks: tracks)
             errorMessage = nil
         } catch {
@@ -168,7 +168,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func play(playlist: SCPlaylist) async {
-        guard let session, let api = session.apiClient else {
+        guard let session else {
             errorMessage = "Connect SoundCloud first"
             return
         }
@@ -177,8 +177,8 @@ final class LibraryViewModel: ObservableObject {
         defer { isLoadingPlaylist = false }
 
         do {
-            let tracks = try await loadTracks(for: playlist, api: api)
-            await session.play(tracks: tracks, startAt: 0)
+            let tracks = try await session.loadPlaylistTracks(for: playlist)
+            await session.playPlaylist(tracks: tracks, startAt: 0)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -195,7 +195,7 @@ final class LibraryViewModel: ObservableObject {
             return
         }
 
-        await session.play(tracks: selectedPlaylist.tracks, startAt: 0)
+        await session.playPlaylist(tracks: selectedPlaylist.tracks, startAt: 0)
     }
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
@@ -209,7 +209,7 @@ final class LibraryViewModel: ObservableObject {
         }
 
         let startIndex = selectedPlaylist.tracks.firstIndex(where: { $0.id == track.id }) ?? 0
-        await session.play(tracks: selectedPlaylist.tracks, startAt: startIndex)
+        await session.playPlaylist(tracks: selectedPlaylist.tracks, startAt: startIndex)
     }
 
     func clearPlaylistSelection() {
@@ -218,34 +218,6 @@ final class LibraryViewModel: ObservableObject {
 
     private var hasLibraryContent: Bool {
         !myPlaylists.isEmpty || !myLikedTracks.isEmpty || !myLikedPlaylists.isEmpty
-    }
-
-    private func loadTracks(for playlist: SCPlaylist, api: SoundCloudAPIClienting) async throws -> [SCTrack] {
-        do {
-            let page = try await api.playlistTracks(urn: playlist.urn, limit: 100, nextHref: nil)
-            if !page.collection.isEmpty {
-                return page.collection
-            }
-        } catch {
-            if playlist.tracks?.isEmpty != false {
-                throw error
-            }
-        }
-
-        var detailedTracks: [SCTrack] = []
-        for entry in (playlist.tracks ?? []).prefix(100) {
-            do {
-                detailedTracks.append(try await api.track(urn: entry.urn))
-            } catch {
-                continue
-            }
-        }
-
-        guard !detailedTracks.isEmpty else {
-            throw CloudScrobbleError.invalidResponse
-        }
-
-        return detailedTracks
     }
 
     private static func buildSmartMixes(from tracks: [SCTrack]) -> [SmartMix] {

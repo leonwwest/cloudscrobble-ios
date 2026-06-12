@@ -167,26 +167,14 @@ final class SearchViewModel: ObservableObject {
     }
 
     func open(playlist: SCPlaylist) async {
-        guard let session, let api = session.apiClient else { return }
+        guard let session else { return }
 
         isLoading = true
         defer { isLoading = false }
 
         do {
-            if let compactTracks = playlist.tracks, !compactTracks.isEmpty {
-                var detailedTracks: [SCTrack] = []
-                detailedTracks.reserveCapacity(compactTracks.count)
-
-                for entry in compactTracks {
-                    if let track = try await session.apiClient?.track(urn: entry.urn) {
-                        detailedTracks.append(track)
-                    }
-                }
-                selectedPlaylistTracks = detailedTracks
-            } else {
-                let page = try await api.playlistTracks(urn: playlist.urn, limit: 100, nextHref: nil)
-                selectedPlaylistTracks = page.collection
-            }
+            selectedPlaylistTracks = try await session.loadPlaylistTracks(for: playlist)
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -198,7 +186,7 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
-        await session.play(tracks: selectedPlaylistTracks, startAt: 0)
+        await session.playPlaylist(tracks: selectedPlaylistTracks, startAt: 0)
     }
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
@@ -212,7 +200,7 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
-        await session.play(tracks: selectedPlaylistTracks, startAt: startIndex)
+        await session.playPlaylist(tracks: selectedPlaylistTracks, startAt: startIndex)
     }
 
     func open(user: SCUser) async {

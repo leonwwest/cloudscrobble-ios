@@ -366,6 +366,10 @@ final class AppSessionViewModel: ObservableObject {
         }
     }
 
+    func playPlaylist(tracks: [SCTrack], startAt: Int = 0) async {
+        await play(tracks: tracks, startAt: startAt, maxQueueLength: tracks.count)
+    }
+
     func addToQueue(track: SCTrack) async {
         guard !soundCloudMockMode else {
             statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
@@ -404,6 +408,57 @@ final class AppSessionViewModel: ObservableObject {
         } catch {
             statusMessage = "Play next failed: \(error.localizedDescription)"
         }
+    }
+
+    func loadPlaylistTracks(for playlist: SCPlaylist, maximumTracks: Int = 1_000) async throws -> [SCTrack] {
+        guard let api = apiClient else {
+            throw CloudScrobbleError.invalidConfiguration("Connect SoundCloud first")
+        }
+
+        let cappedMaximum = max(1, maximumTracks)
+        var endpointTracks: [SCTrack] = []
+        var endpointError: Error?
+
+        do {
+            var nextHref: URL?
+
+            repeat {
+                let remaining = max(1, min(100, cappedMaximum - endpointTracks.count))
+                let page = try await api.playlistTracks(
+                    urn: playlist.urn,
+                    limit: remaining,
+                    nextHref: nextHref
+                )
+                endpointTracks.append(contentsOf: page.collection)
+                nextHref = page.nextHref
+            } while nextHref != nil && endpointTracks.count < cappedMaximum
+        } catch {
+            endpointError = error
+        }
+
+        let compactEntries = await playlistTrackEntries(
+            for: playlist,
+            api: api,
+            maximumTracks: cappedMaximum
+        )
+        let uniqueEndpointTracks = uniquePlaylistTracks(endpointTracks)
+
+        if compactEntries.count > uniqueEndpointTracks.count || uniqueEndpointTracks.isEmpty {
+            let detailedTracks = await detailedTracks(from: compactEntries, api: api)
+            let uniqueDetailedTracks = uniquePlaylistTracks(detailedTracks)
+            if !uniqueDetailedTracks.isEmpty {
+                return uniqueDetailedTracks
+            }
+        }
+
+        if !uniqueEndpointTracks.isEmpty {
+            return uniqueEndpointTracks
+        }
+
+        if let endpointError {
+            throw endpointError
+        }
+        throw CloudScrobbleError.invalidResponse
     }
 
     func play(savedTrack: SavedPlaybackTrack) async {
@@ -476,6 +531,40 @@ final class AppSessionViewModel: ObservableObject {
         let lowerBound = clampedStart < queueLimit ? 0 : clampedStart
         let upperBound = min(tracks.count, lowerBound + queueLimit)
         return (Array(tracks[lowerBound..<upperBound]), clampedStart - lowerBound)
+    }
+
+    private func uniquePlaylistTracks(_ tracks: [SCTrack]) -> [SCTrack] {
+        var seen = Set<String>()
+        return tracks.filter { track in
+            seen.insert(track.id).inserted
+        }
+    }
+
+    private func playlistTrackEntries(
+        for playlist: SCPlaylist,
+        api: SoundCloudAPIClienting,
+        maximumTracks: Int
+    ) async -> [SCPlaylistTrackItem] {
+        let detailedPlaylist = try? await api.playlist(urn: playlist.urn, showTracks: true)
+        let entries = detailedPlaylist?.tracks ?? playlist.tracks ?? []
+        return Array(entries.prefix(maximumTracks))
+    }
+
+    private func detailedTracks(
+        from entries: [SCPlaylistTrackItem],
+        api: SoundCloudAPIClienting
+    ) async -> [SCTrack] {
+        var tracks: [SCTrack] = []
+        tracks.reserveCapacity(entries.count)
+
+        for entry in entries {
+            guard let track = try? await api.track(urn: entry.urn) else {
+                continue
+            }
+            tracks.append(track)
+        }
+
+        return tracks
     }
 
     private func makeQueueItem(

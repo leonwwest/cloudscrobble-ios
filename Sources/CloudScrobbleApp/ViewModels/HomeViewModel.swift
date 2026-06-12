@@ -131,7 +131,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func open(playlist: SCPlaylist) async {
-        guard let session, let api = session.apiClient else {
+        guard let session else {
             message = "Connect SoundCloud first"
             return
         }
@@ -140,7 +140,7 @@ final class HomeViewModel: ObservableObject {
         defer { isLoadingPlaylist = false }
 
         do {
-            let tracks = try await loadTracks(for: playlist, api: api)
+            let tracks = try await session.loadPlaylistTracks(for: playlist)
             selectedPlaylist = PlaylistTracksData(playlist: playlist, tracks: tracks)
             message = nil
         } catch {
@@ -149,7 +149,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func play(playlist: SCPlaylist) async {
-        guard let session, let api = session.apiClient else {
+        guard let session else {
             message = "Connect SoundCloud first"
             return
         }
@@ -158,8 +158,8 @@ final class HomeViewModel: ObservableObject {
         defer { isLoadingPlaylist = false }
 
         do {
-            let tracks = try await loadTracks(for: playlist, api: api)
-            await session.play(tracks: tracks, startAt: 0, maxQueueLength: 60)
+            let tracks = try await session.loadPlaylistTracks(for: playlist)
+            await session.playPlaylist(tracks: tracks, startAt: 0)
             message = nil
         } catch {
             message = "Playlist playback failed: \(error.localizedDescription)"
@@ -176,7 +176,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        await session.play(tracks: selectedPlaylist.tracks, startAt: 0, maxQueueLength: 60)
+        await session.playPlaylist(tracks: selectedPlaylist.tracks, startAt: 0)
     }
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
@@ -190,7 +190,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         let startIndex = selectedPlaylist.tracks.firstIndex(where: { $0.id == track.id }) ?? 0
-        await session.play(tracks: selectedPlaylist.tracks, startAt: startIndex, maxQueueLength: 60)
+        await session.playPlaylist(tracks: selectedPlaylist.tracks, startAt: startIndex)
     }
 
     func clearPlaylistSelection() {
