@@ -10,13 +10,18 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
 
-    private unowned let session: AppSessionViewModel
+    private weak var session: AppSessionViewModel?
 
     init(session: AppSessionViewModel) {
         self.session = session
     }
 
     func refresh() async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         guard let api = session.apiClient else {
             errorMessage = "Connect SoundCloud first"
             return
@@ -54,6 +59,11 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         await session.play(track: track)
     }
 }

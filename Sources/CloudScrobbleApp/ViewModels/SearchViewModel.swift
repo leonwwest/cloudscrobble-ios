@@ -28,7 +28,7 @@ final class SearchViewModel: ObservableObject {
     private var usersNextHref: URL?
     private var searchTask: Task<Void, Never>?
 
-    private unowned let session: AppSessionViewModel
+    private weak var session: AppSessionViewModel?
 
     struct UserProfileData {
         let user: SCUser
@@ -67,6 +67,11 @@ final class SearchViewModel: ObservableObject {
     }
 
     func runSearch(reset: Bool = true) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         guard let api = session.apiClient else {
             errorMessage = "Connect SoundCloud first"
             return
@@ -129,6 +134,11 @@ final class SearchViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         let contextTracks = playbackContext(for: track)
         guard let startIndex = contextTracks.firstIndex(where: { $0.id == track.id }) else {
             await session.play(track: track)
@@ -139,7 +149,7 @@ final class SearchViewModel: ObservableObject {
     }
 
     func open(playlist: SCPlaylist) async {
-        guard let api = session.apiClient else { return }
+        guard let session, let api = session.apiClient else { return }
 
         isLoading = true
         defer { isLoading = false }
@@ -165,10 +175,20 @@ final class SearchViewModel: ObservableObject {
     }
 
     func playSelectedPlaylist() async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         await session.play(tracks: selectedPlaylistTracks, startAt: 0)
     }
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
         guard let startIndex = selectedPlaylistTracks.firstIndex(where: { $0.id == track.id }) else {
             await session.play(track: track)
             return
@@ -178,7 +198,7 @@ final class SearchViewModel: ObservableObject {
     }
 
     func open(user: SCUser) async {
-        guard let api = session.apiClient else { return }
+        guard let session, let api = session.apiClient else { return }
 
         isLoading = true
         defer { isLoading = false }
