@@ -142,6 +142,8 @@ public actor SoundCloudTokenProvider: AccessTokenProviding {
 
         if token.isExpired(), let refreshToken = token.refreshToken {
             token = try await authService.refreshToken(refreshToken)
+        } else if token.isExpired() {
+            token = try await authService.fetchClientCredentialsToken()
         }
 
         return token.accessToken

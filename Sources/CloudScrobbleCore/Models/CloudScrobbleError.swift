@@ -19,6 +19,9 @@ public enum CloudScrobbleError: LocalizedError, Sendable {
         case .invalidResponse:
             return "Server response could not be decoded."
         case .httpStatus(let code, let data):
+            if code == 401 {
+                return "SoundCloud session expired. Reconnect SoundCloud if this keeps happening."
+            }
             if let details = Self.httpErrorDetails(from: data) {
                 return "Request failed with HTTP \(code): \(details)"
             }

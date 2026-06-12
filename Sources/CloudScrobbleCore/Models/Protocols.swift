@@ -8,6 +8,7 @@ public protocol SoundCloudAuthProviding: Sendable {
     func makeAuthorizationURL(codeChallenge: String, state: String, redirectURI: String) async throws -> URL
     func exchangeAuthorizationCode(_ code: String, codeVerifier: String, redirectURI: String) async throws -> SoundCloudToken
     func refreshToken(_ refreshToken: String) async throws -> SoundCloudToken
+    func fetchClientCredentialsToken() async throws -> SoundCloudToken
     func cachedToken() async -> SoundCloudToken?
     func setCachedToken(_ token: SoundCloudToken) async throws
     func clearCachedToken() async throws

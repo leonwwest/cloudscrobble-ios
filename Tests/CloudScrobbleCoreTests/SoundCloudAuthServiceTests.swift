@@ -31,4 +31,117 @@ final class SoundCloudAuthServiceTests: XCTestCase {
         XCTAssertEqual(items["state"], "state123")
         XCTAssertFalse(items.keys.contains("display"))
     }
+
+    func testTokenProviderRefreshesExpiredOAuthToken() async throws {
+        let service = MockSoundCloudAuthProvider(
+            cachedToken: SoundCloudToken(
+                accessToken: "expired-oauth",
+                refreshToken: "refresh-token",
+                tokenType: "Bearer",
+                scope: nil,
+                expiresAt: Date(timeIntervalSinceNow: -60)
+            ),
+            refreshedToken: SoundCloudToken(
+                accessToken: "fresh-oauth",
+                refreshToken: "refresh-token-2",
+                tokenType: "Bearer",
+                scope: nil,
+                expiresAt: Date(timeIntervalSinceNow: 3_600)
+            ),
+            clientCredentialsToken: nil
+        )
+
+        let token = try await SoundCloudTokenProvider(authService: service).validAccessToken()
+        let refreshCallCount = await service.refreshCallCount
+        let clientCredentialsCallCount = await service.clientCredentialsCallCount
+
+        XCTAssertEqual(token, "fresh-oauth")
+        XCTAssertEqual(refreshCallCount, 1)
+        XCTAssertEqual(clientCredentialsCallCount, 0)
+    }
+
+    func testTokenProviderReissuesExpiredPublicModeToken() async throws {
+        let service = MockSoundCloudAuthProvider(
+            cachedToken: SoundCloudToken(
+                accessToken: "expired-public",
+                refreshToken: nil,
+                tokenType: "Bearer",
+                scope: nil,
+                expiresAt: Date(timeIntervalSinceNow: -60)
+            ),
+            refreshedToken: nil,
+            clientCredentialsToken: SoundCloudToken(
+                accessToken: "fresh-public",
+                refreshToken: nil,
+                tokenType: "Bearer",
+                scope: nil,
+                expiresAt: Date(timeIntervalSinceNow: 3_600)
+            )
+        )
+
+        let token = try await SoundCloudTokenProvider(authService: service).validAccessToken()
+        let refreshCallCount = await service.refreshCallCount
+        let clientCredentialsCallCount = await service.clientCredentialsCallCount
+
+        XCTAssertEqual(token, "fresh-public")
+        XCTAssertEqual(refreshCallCount, 0)
+        XCTAssertEqual(clientCredentialsCallCount, 1)
+    }
+}
+
+private actor MockSoundCloudAuthProvider: SoundCloudAuthProviding {
+    private var token: SoundCloudToken?
+    private let refreshedToken: SoundCloudToken?
+    private let clientCredentialsToken: SoundCloudToken?
+
+    private(set) var refreshCallCount = 0
+    private(set) var clientCredentialsCallCount = 0
+
+    init(
+        cachedToken: SoundCloudToken?,
+        refreshedToken: SoundCloudToken?,
+        clientCredentialsToken: SoundCloudToken?
+    ) {
+        token = cachedToken
+        self.refreshedToken = refreshedToken
+        self.clientCredentialsToken = clientCredentialsToken
+    }
+
+    func makeAuthorizationURL(codeChallenge: String, state: String, redirectURI: String) async throws -> URL {
+        URL(string: "https://secure.soundcloud.com/authorize")!
+    }
+
+    func exchangeAuthorizationCode(_ code: String, codeVerifier: String, redirectURI: String) async throws -> SoundCloudToken {
+        throw CloudScrobbleError.invalidResponse
+    }
+
+    func refreshToken(_ refreshToken: String) async throws -> SoundCloudToken {
+        refreshCallCount += 1
+        guard let refreshedToken else {
+            throw CloudScrobbleError.missingToken
+        }
+        token = refreshedToken
+        return refreshedToken
+    }
+
+    func fetchClientCredentialsToken() async throws -> SoundCloudToken {
+        clientCredentialsCallCount += 1
+        guard let clientCredentialsToken else {
+            throw CloudScrobbleError.missingToken
+        }
+        token = clientCredentialsToken
+        return clientCredentialsToken
+    }
+
+    func cachedToken() async -> SoundCloudToken? {
+        token
+    }
+
+    func setCachedToken(_ token: SoundCloudToken) async throws {
+        self.token = token
+    }
+
+    func clearCachedToken() async throws {
+        token = nil
+    }
 }

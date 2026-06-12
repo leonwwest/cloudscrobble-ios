@@ -6,14 +6,14 @@ final class CloudScrobbleErrorTests: XCTestCase {
         let data = #"{"error":"invalid_client"}"#.data(using: .utf8)
         let error = CloudScrobbleError.httpStatus(401, data)
 
-        XCTAssertEqual(error.errorDescription, "Request failed with HTTP 401: invalid_client")
+        XCTAssertEqual(error.errorDescription, "SoundCloud session expired. Reconnect SoundCloud if this keeps happening.")
     }
 
     func testHTTPStatusDescriptionIncludesUpstreamMessageField() {
         let data = #"{"message":"token expired"}"#.data(using: .utf8)
         let error = CloudScrobbleError.httpStatus(401, data)
 
-        XCTAssertEqual(error.errorDescription, "Request failed with HTTP 401: token expired")
+        XCTAssertEqual(error.errorDescription, "SoundCloud session expired. Reconnect SoundCloud if this keeps happening.")
     }
 
     func testHTTPStatusDescriptionFallsBackWithoutPayload() {
