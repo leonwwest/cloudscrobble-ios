@@ -1,8 +1,6 @@
 import Foundation
 
 public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
-    public static let demoStreamURL = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8")!
-
     private let meUser: SCUser
     private let users: [SCUser]
     private let tracks: [SCTrack]
@@ -193,7 +191,7 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
         guard tracksByURN[trackURN] != nil else {
             throw CloudScrobbleError.invalidConfiguration("Mock track not found for urn: \(trackURN)")
         }
-        return SCStreams(hlsAac160URL: Self.demoStreamURL, hlsAac96URL: nil)
+        return SCStreams()
     }
 
     public func streamRequestHeaders() async throws -> [String: String] {
@@ -204,7 +202,7 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
         guard tracksByURN[trackURN] != nil else {
             throw CloudScrobbleError.invalidConfiguration("Mock track not found for urn: \(trackURN)")
         }
-        return Self.demoStreamURL
+        throw CloudScrobbleError.unsupportedStream
     }
 
     private func filterTracks(query: String) -> [SCTrack] {

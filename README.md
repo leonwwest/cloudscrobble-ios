@@ -15,7 +15,7 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
 - `CloudScrobbleApp` (SwiftUI executable target)
   - Tabs: Search / Library / Player
   - Connect SoundCloud and Last.fm
-  - Demo Mode: local mock SoundCloud catalog + test HLS stream (works without SoundCloud API)
+  - Demo Mode: local mock SoundCloud catalog without audio playback
   - SoundCloud login via system browser + callback deep-link
   - Search tracks/playlists/users
   - Open public user profiles
@@ -99,7 +99,7 @@ If "Connect SoundCloud" fails in-app, verify:
 7. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
 8. Fallback for testing:
    - `Use SoundCloud Public Mode` (real API token, `/me` library disabled)
-   - `Use Demo Mode` (no SoundCloud API required; mock catalog + test stream)
+   - `Use Demo Mode` (no SoundCloud API required; mock catalog only, no audio playback)
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`

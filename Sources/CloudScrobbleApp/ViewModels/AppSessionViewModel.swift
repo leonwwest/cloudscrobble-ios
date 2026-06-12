@@ -225,7 +225,7 @@ final class AppSessionViewModel: ObservableObject {
     func connectSoundCloudDemoMode() async {
         pendingSoundCloudAuthorization = nil
         activateMockMode()
-        statusMessage = "Demo Mode enabled: local mock catalog + test stream are active."
+        statusMessage = "Demo Mode enabled: mock catalog only. Connect SoundCloud to play real audio."
     }
 
     func handleIncomingOAuthCallback(_ url: URL) async {
@@ -310,6 +310,11 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
         guard let playbackResolver = activePlaybackResolver else {
             statusMessage = "Playback resolver unavailable"
             return
@@ -337,6 +342,11 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(tracks: [SCTrack], startAt: Int = 0, maxQueueLength: Int = 25) async {
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
         guard let playbackResolver = activePlaybackResolver else {
             statusMessage = "Playback resolver unavailable"
             return

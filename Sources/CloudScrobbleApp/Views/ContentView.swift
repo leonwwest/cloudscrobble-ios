@@ -117,7 +117,7 @@ struct ContentView: View {
             }
 
             if session.soundCloudConnected && session.soundCloudMockMode {
-                Text("Demo Mode active: local mock catalog + test HLS stream. No SoundCloud API required.")
+                Text("Demo Mode active: mock catalog only. Connect SoundCloud or Public Mode for real audio.")
                     .font(.system(.caption2, design: .serif))
                     .foregroundStyle(CloudTheme.muted)
             }

@@ -11,7 +11,7 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         XCTAssertNil(page.nextHref)
     }
 
-    func testPlaylistTracksAndStreamsAreAvailable() async throws {
+    func testPlaylistTracksAreAvailableWithoutDemoAudioStream() async throws {
         let api = MockSoundCloudAPIClient()
         let playlists = try await api.searchPlaylists(query: "Demo", limit: 10, nextHref: nil).collection
         let playlist = try XCTUnwrap(playlists.first)
@@ -20,8 +20,10 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let firstTrack = try XCTUnwrap(tracksPage.collection.first)
         let streams = try await api.streams(trackURN: firstTrack.urn)
 
-        XCTAssertEqual(streams.hlsAac160URL, MockSoundCloudAPIClient.demoStreamURL)
+        XCTAssertNil(streams.hlsAac160URL)
         XCTAssertNil(streams.hlsAac96URL)
+        XCTAssertNil(streams.hlsMP3128URL)
+        XCTAssertNil(streams.httpMP3128URL)
     }
 
     func testPersonalLibraryCollectionsArePlayable() async throws {
@@ -35,14 +37,14 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let playlist = try XCTUnwrap(playlists.first)
         let playlistTracks = try await api.playlistTracks(urn: playlist.urn, limit: 20, nextHref: nil).collection
         let firstTrack = try XCTUnwrap(playlistTracks.first)
-        let stream = try await api.streams(trackURN: firstTrack.urn)
+        let streams = try await api.streams(trackURN: firstTrack.urn)
 
         XCTAssertEqual(me.username, "CloudScrobble Demo")
         XCTAssertFalse(playlists.isEmpty)
         XCTAssertFalse(likedTracks.isEmpty)
         XCTAssertFalse(likedPlaylists.isEmpty)
         XCTAssertEqual(playlist.user.urn, me.urn)
-        XCTAssertNotNil(stream.hlsAac160URL)
+        XCTAssertNil(streams.hlsAac160URL)
     }
 
     func testPlaybackResolverUsesCurrentSoundCloudMP3HLSStreamFields() async throws {
