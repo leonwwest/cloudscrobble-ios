@@ -50,6 +50,10 @@ struct SearchView: View {
         )) { model in
             UserProfileSheet(profile: model.profile, onPlayTrack: { track in
                 Task { await viewModel.play(track: track) }
+            }, onPlayNextTrack: { track in
+                Task { await viewModel.playNext(track: track) }
+            }, onAddToQueueTrack: { track in
+                Task { await viewModel.addToQueue(track: track) }
             })
         }
         .sheet(isPresented: Binding(
@@ -67,6 +71,12 @@ struct SearchView: View {
                 },
                 onPlayTrack: { track in
                     Task { await viewModel.playSelectedPlaylist(startingWith: track) }
+                },
+                onPlayNextTrack: { track in
+                    Task { await viewModel.playNext(track: track) }
+                },
+                onAddToQueueTrack: { track in
+                    Task { await viewModel.addToQueue(track: track) }
                 }
             )
         }
@@ -149,6 +159,10 @@ struct SearchView: View {
                     ForEach(viewModel.tracks) { track in
                         TrackResultCard(track: track) {
                             Task { await viewModel.play(track: track) }
+                        } onPlayNext: {
+                            Task { await viewModel.playNext(track: track) }
+                        } onAddToQueue: {
+                            Task { await viewModel.addToQueue(track: track) }
                         }
                         .task {
                             await viewModel.loadMoreIfNeeded(currentItemID: track.id)
@@ -205,6 +219,8 @@ struct SearchView: View {
 private struct TrackResultCard: View {
     let track: SCTrack
     let onPlay: () -> Void
+    var onPlayNext: (() -> Void)?
+    var onAddToQueue: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -234,6 +250,30 @@ private struct TrackResultCard: View {
             }
 
             Spacer()
+
+            if let onPlayNext {
+                Button(action: onPlayNext) {
+                    Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.elevatedStrong))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play next")
+            }
+
+            if let onAddToQueue {
+                Button(action: onAddToQueue) {
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.elevatedStrong))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add to queue")
+            }
 
             Button(action: onPlay) {
                 Image(systemName: "play.fill")
@@ -355,6 +395,8 @@ private struct UserProfileSheetModel: Identifiable {
 private struct UserProfileSheet: View {
     let profile: SearchViewModel.UserProfileData
     let onPlayTrack: (SCTrack) -> Void
+    let onPlayNextTrack: (SCTrack) -> Void
+    let onAddToQueueTrack: (SCTrack) -> Void
 
     var body: some View {
         ScrollView {
@@ -375,6 +417,10 @@ private struct UserProfileSheet: View {
                 ForEach(profile.tracks.prefix(20)) { track in
                     TrackResultCard(track: track) {
                         onPlayTrack(track)
+                    } onPlayNext: {
+                        onPlayNextTrack(track)
+                    } onAddToQueue: {
+                        onAddToQueueTrack(track)
                     }
                 }
 
@@ -396,6 +442,8 @@ private struct PlaylistTracksSheet: View {
     let tracks: [SCTrack]
     let onPlayAll: () -> Void
     let onPlayTrack: (SCTrack) -> Void
+    let onPlayNextTrack: (SCTrack) -> Void
+    let onAddToQueueTrack: (SCTrack) -> Void
 
     var body: some View {
         ScrollView {
@@ -416,6 +464,10 @@ private struct PlaylistTracksSheet: View {
                 ForEach(tracks) { track in
                     TrackResultCard(track: track) {
                         onPlayTrack(track)
+                    } onPlayNext: {
+                        onPlayNextTrack(track)
+                    } onAddToQueue: {
+                        onAddToQueueTrack(track)
                     }
                 }
             }

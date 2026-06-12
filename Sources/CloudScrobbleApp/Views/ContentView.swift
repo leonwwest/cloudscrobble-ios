@@ -1,6 +1,13 @@
+import CloudScrobbleCore
 import SwiftUI
 
 struct ContentView: View {
+    private enum AppTab {
+        case search
+        case library
+        case player
+    }
+
     @StateObject private var session = AppSessionViewModel()
 
     @State private var lastFMUsername = ""
@@ -9,6 +16,7 @@ struct ContentView: View {
     @State private var showSettingsSheet = false
     @State private var deckVisible = false
     @State private var pendingLastFMScrobbles = 0
+    @State private var selectedTab: AppTab = .search
 
     var body: some View {
         GeometryReader { proxy in
@@ -22,15 +30,18 @@ struct ContentView: View {
                         .opacity(deckVisible ? 1 : 0)
                         .offset(y: deckVisible ? 0 : -10)
 
-                    TabView {
+                    TabView(selection: $selectedTab) {
                         SearchView(viewModel: SearchViewModel(session: session))
                             .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                            .tag(AppTab.search)
 
                         LibraryView(session: session, viewModel: LibraryViewModel(session: session))
                             .tabItem { Label("Library", systemImage: "books.vertical") }
+                            .tag(AppTab.library)
 
-                        PlayerView(controller: session.playerController)
+                        PlayerView(session: session)
                             .tabItem { Label("Player", systemImage: "play.circle.fill") }
+                            .tag(AppTab.player)
                     }
                     .tint(CloudTheme.sky)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -47,6 +58,18 @@ struct ContentView: View {
                         .onTapGesture {
                             session.clearStatusMessage()
                         }
+                }
+
+                if selectedTab != .player, session.playerController.currentItem != nil {
+                    MiniPlayerBar(controller: session.playerController) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                            selectedTab = .player
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 70)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
@@ -220,6 +243,18 @@ struct ContentView: View {
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.ink)
                 .lineLimit(2)
+
+            if message.needsSoundCloudReconnect {
+                Spacer(minLength: 4)
+                Button {
+                    Task { await session.reconnectSoundCloud() }
+                } label: {
+                    Label("Reconnect", systemImage: "link")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Reconnect SoundCloud")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -255,6 +290,16 @@ struct ContentView: View {
                             }
                         } label: {
                             Label("Refresh status", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+
+                        Button {
+                            Task {
+                                await session.reconnectSoundCloud()
+                                await refreshDiagnostics()
+                            }
+                        } label: {
+                            Label("Reconnect SoundCloud", systemImage: "link")
                         }
                         .buttonStyle(SecondaryPillButtonStyle())
 
@@ -398,6 +443,74 @@ struct ContentView: View {
     }
 }
 
+private struct MiniPlayerBar: View {
+    @ObservedObject var controller: PlayerScrobbleController
+    let onOpenPlayer: () -> Void
+
+    var body: some View {
+        if let item = controller.currentItem {
+            HStack(spacing: 10) {
+                AsyncImage(url: item.artworkURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(CloudTheme.elevatedStrong)
+                            .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
+                    }
+                }
+                .frame(width: 46, height: 46)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .lineLimit(1)
+                    Text(item.artistDisplay)
+                        .font(.system(.caption2, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpenPlayer)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    controller.togglePlayback()
+                } label: {
+                    Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
+                }
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
+
+                Button {
+                    controller.next()
+                } label: {
+                    Image(systemName: "forward.fill")
+                }
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Next track")
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(CloudTheme.shell.opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpenPlayer)
+            .accessibilityLabel("Open player")
+        }
+    }
+}
+
 private struct SettingsInfoRow: View {
     let title: String
     let value: String
@@ -426,5 +539,15 @@ private extension String {
             || lowered.contains("missing")
             || lowered.contains("invalid")
             || lowered.contains("canceled")
+            || lowered.contains("expired")
+            || lowered.contains("unavailable")
+            || lowered.contains("http 401")
+    }
+
+    var needsSoundCloudReconnect: Bool {
+        let lowered = lowercased()
+        return lowered.contains("soundcloud session expired")
+            || lowered.contains("http 401")
+            || lowered.contains("missing or invalid")
     }
 }

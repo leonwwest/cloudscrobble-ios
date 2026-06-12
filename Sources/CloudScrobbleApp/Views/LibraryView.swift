@@ -91,6 +91,12 @@ struct LibraryView: View {
                         await viewModel.playSelectedPlaylist(startingWith: track)
                         await MainActor.run { viewModel.clearPlaylistSelection() }
                     }
+                },
+                onPlayNextTrack: { track in
+                    Task { await viewModel.playNext(track: track) }
+                },
+                onAddToQueueTrack: { track in
+                    Task { await viewModel.addToQueue(track: track) }
                 }
             )
         }
@@ -132,6 +138,10 @@ struct LibraryView: View {
                 ForEach(viewModel.myLikedTracks.prefix(24)) { track in
                     LibraryTrackRow(track: track) {
                         Task { await viewModel.play(track: track) }
+                    } onPlayNext: {
+                        Task { await viewModel.playNext(track: track) }
+                    } onAddToQueue: {
+                        Task { await viewModel.addToQueue(track: track) }
                     }
                 }
             }
@@ -392,6 +402,8 @@ private struct LibraryPlaylistCard: View {
 private struct LibraryTrackRow: View {
     let track: SCTrack
     let onPlay: () -> Void
+    var onPlayNext: (() -> Void)?
+    var onAddToQueue: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -410,6 +422,30 @@ private struct LibraryTrackRow: View {
             }
 
             Spacer(minLength: 4)
+
+            if let onPlayNext {
+                Button(action: onPlayNext) {
+                    Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.elevatedStrong))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play next")
+            }
+
+            if let onAddToQueue {
+                Button(action: onAddToQueue) {
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.elevatedStrong))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add to queue")
+            }
 
             Button(action: onPlay) {
                 Image(systemName: "play.fill")
@@ -445,6 +481,8 @@ private struct LibraryPlaylistTracksSheet: View {
     let onClose: () -> Void
     let onPlayAll: () -> Void
     let onPlayTrack: (SCTrack) -> Void
+    let onPlayNextTrack: (SCTrack) -> Void
+    let onAddToQueueTrack: (SCTrack) -> Void
 
     var body: some View {
         ScrollView {
@@ -492,6 +530,10 @@ private struct LibraryPlaylistTracksSheet: View {
                 ForEach(tracks) { track in
                     LibraryTrackRow(track: track) {
                         onPlayTrack(track)
+                    } onPlayNext: {
+                        onPlayNextTrack(track)
+                    } onAddToQueue: {
+                        onAddToQueueTrack(track)
                     }
                 }
             }

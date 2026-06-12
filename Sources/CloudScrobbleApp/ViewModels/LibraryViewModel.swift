@@ -3,6 +3,17 @@ import Foundation
 
 @MainActor
 final class LibraryViewModel: ObservableObject {
+    private enum Storage {
+        static let cachedLibraryKey = "cloudscrobble.cachedLibrary.v1"
+    }
+
+    private struct CachedLibrary: Codable {
+        let me: SCUser?
+        let myPlaylists: [SCPlaylist]
+        let myLikedTracks: [SCTrack]
+        let myLikedPlaylists: [SCPlaylist]
+    }
+
     struct SmartMix: Identifiable {
         let id: String
         let title: String
@@ -36,6 +47,7 @@ final class LibraryViewModel: ObservableObject {
 
     init(session: AppSessionViewModel) {
         self.session = session
+        restoreCachedLibrary()
     }
 
     func refresh() async {
@@ -45,7 +57,9 @@ final class LibraryViewModel: ObservableObject {
         }
 
         guard let api = session.apiClient else {
-            errorMessage = "Connect SoundCloud first"
+            errorMessage = hasLibraryContent
+                ? "Showing cached library. Connect SoundCloud to refresh."
+                : "Connect SoundCloud first"
             return
         }
         if session.soundCloudPublicMode && !session.soundCloudMockMode {
@@ -77,6 +91,7 @@ final class LibraryViewModel: ObservableObject {
             myLikedTracks = likedTracksPage.collection
             myLikedPlaylists = likedPlaylistsPage.collection
             smartMixes = Self.buildSmartMixes(from: likedTracksPage.collection)
+            persistCachedLibrary()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -96,6 +111,24 @@ final class LibraryViewModel: ObservableObject {
         }
 
         await session.play(tracks: context, startAt: startIndex)
+    }
+
+    func playNext(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
+        await session.playNext(track: track)
+    }
+
+    func addToQueue(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
+        await session.addToQueue(track: track)
     }
 
     func play(mix: SmartMix) async {
@@ -174,6 +207,10 @@ final class LibraryViewModel: ObservableObject {
         selectedPlaylist = nil
     }
 
+    private var hasLibraryContent: Bool {
+        !myPlaylists.isEmpty || !myLikedTracks.isEmpty || !myLikedPlaylists.isEmpty
+    }
+
     private func loadTracks(for playlist: SCPlaylist, api: SoundCloudAPIClienting) async throws -> [SCTrack] {
         do {
             let page = try await api.playlistTracks(urn: playlist.urn, limit: 100, nextHref: nil)
@@ -235,5 +272,31 @@ final class LibraryViewModel: ObservableObject {
         }
 
         return mixes
+    }
+
+    private func restoreCachedLibrary() {
+        guard let data = UserDefaults.standard.data(forKey: Storage.cachedLibraryKey),
+              let cached = try? JSONDecoder().decode(CachedLibrary.self, from: data) else {
+            return
+        }
+
+        me = cached.me
+        myPlaylists = cached.myPlaylists
+        myLikedTracks = cached.myLikedTracks
+        myLikedPlaylists = cached.myLikedPlaylists
+        smartMixes = Self.buildSmartMixes(from: cached.myLikedTracks)
+    }
+
+    private func persistCachedLibrary() {
+        let cached = CachedLibrary(
+            me: me,
+            myPlaylists: myPlaylists,
+            myLikedTracks: myLikedTracks,
+            myLikedPlaylists: myLikedPlaylists
+        )
+        guard let data = try? JSONEncoder().encode(cached) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Storage.cachedLibraryKey)
     }
 }

@@ -26,6 +26,7 @@ public enum PlaybackRepeatMode: String, CaseIterable, Sendable {
 public final class PlayerScrobbleController: ObservableObject {
     private enum Storage {
         static let savedPlaybackSnapshotKey = "cloudscrobble.savedPlaybackSnapshot.v1"
+        static let recentlyPlayedKey = "cloudscrobble.recentlyPlayed.v1"
     }
 
     @Published public private(set) var phase: PlaybackPhase = .idle
@@ -35,6 +36,7 @@ public final class PlayerScrobbleController: ObservableObject {
     @Published public private(set) var debugStatus: String = ""
     @Published public private(set) var isShuffleEnabled = false
     @Published public private(set) var repeatMode: PlaybackRepeatMode = .off
+    @Published public private(set) var recentlyPlayed: [SavedPlaybackTrack] = []
 
     private let player = AVQueuePlayer()
     private let scrobbleEngine = ScrobbleEngine()
@@ -60,8 +62,21 @@ public final class PlayerScrobbleController: ObservableObject {
         !queue.isEmpty
     }
 
+    public var currentItem: QueueItem? {
+        guard let currentIndex, queue.indices.contains(currentIndex) else { return nil }
+        return queue[currentIndex]
+    }
+
+    public var isPlaying: Bool {
+        if case .playing = phase {
+            return true
+        }
+        return false
+    }
+
     public init(lastFMScrobbler: LastFMScrobbleSending?) {
         self.lastFMScrobbler = lastFMScrobbler
+        self.recentlyPlayed = Self.loadRecentlyPlayed()
         player.actionAtItemEnd = .advance
         player.automaticallyWaitsToMinimizeStalling = true
         configureAudioSession()
@@ -121,6 +136,107 @@ public final class PlayerScrobbleController: ObservableObject {
     public func playQueueItem(at index: Int) {
         guard queue.indices.contains(index) else { return }
         rebuildPlayerQueue(startAt: index)
+    }
+
+    public func appendToQueue(_ item: QueueItem) {
+        orderedQueue.append(item)
+        queue.append(item)
+
+        let playerItem = makePlayerItem(for: item)
+        if player.canInsert(playerItem, after: nil) {
+            player.insert(playerItem, after: nil)
+        }
+
+        if currentIndex == nil {
+            rebuildPlayerQueue(startAt: 0)
+        } else {
+            persistPlaybackSnapshot()
+            setDebugStatus("Added to queue", autoDismissAfter: 2_500_000_000)
+        }
+    }
+
+    public func playNext(_ item: QueueItem) {
+        guard let currentIndex else {
+            loadQueue([item], startAt: 0)
+            return
+        }
+
+        let insertIndex = min(currentIndex + 1, queue.count)
+        queue.insert(item, at: insertIndex)
+        orderedQueue.insert(item, at: min(insertIndex, orderedQueue.count))
+
+        let playerItem = makePlayerItem(for: item)
+        if player.canInsert(playerItem, after: player.currentItem) {
+            player.insert(playerItem, after: player.currentItem)
+        }
+
+        persistPlaybackSnapshot()
+        setDebugStatus("Added next", autoDismissAfter: 2_500_000_000)
+    }
+
+    public func removeQueueItem(at index: Int) {
+        guard queue.indices.contains(index) else { return }
+
+        if queue.count == 1 {
+            clearQueue()
+            return
+        }
+
+        let wasPlaying = isPlaying
+        let resumeTime = elapsedSeconds
+        let removingCurrent = index == currentIndex
+        let removedURN = queue[index].trackURN
+        queue.remove(at: index)
+        orderedQueue.removeAll { $0.trackURN == removedURN }
+
+        if removingCurrent {
+            rebuildPlayerQueue(startAt: min(index, queue.count - 1))
+            return
+        }
+
+        if let currentIndex, index < currentIndex {
+            self.currentIndex = currentIndex - 1
+        }
+
+        rebuildPlayerQueuePreservingCurrent(resumeAt: resumeTime, shouldPlay: wasPlaying)
+    }
+
+    public func moveQueueItem(from source: Int, to destination: Int) {
+        guard queue.indices.contains(source), queue.indices.contains(destination), source != destination else {
+            return
+        }
+
+        let currentURN = currentItem?.trackURN
+        let resumeTime = elapsedSeconds
+        let wasPlaying = isPlaying
+        let item = queue.remove(at: source)
+        queue.insert(item, at: destination)
+        orderedQueue = queue
+
+        if let currentURN {
+            currentIndex = queue.firstIndex { $0.trackURN == currentURN }
+        }
+
+        rebuildPlayerQueuePreservingCurrent(resumeAt: resumeTime, shouldPlay: wasPlaying)
+    }
+
+    public func clearQueue() {
+        player.pause()
+        player.removeAllItems()
+        queue = []
+        orderedQueue = []
+        currentIndex = nil
+        elapsedSeconds = 0
+        phase = .idle
+        scrobbleEngine.stop()
+        clearNowPlayingInfo()
+        clearSavedPlaybackSnapshot()
+        setDebugStatus("Queue cleared", autoDismissAfter: 2_500_000_000)
+    }
+
+    public func clearRecentlyPlayed() {
+        recentlyPlayed = []
+        UserDefaults.standard.removeObject(forKey: Storage.recentlyPlayedKey)
     }
 
     public func cycleRepeatMode() {
@@ -279,6 +395,7 @@ public final class PlayerScrobbleController: ObservableObject {
         let item = queue[index]
         currentIndex = index
         elapsedSeconds = 0
+        recordRecentlyPlayed(item)
 
         scrobbleEngine.stop()
         let events = scrobbleEngine.start(track: item)
@@ -640,10 +757,7 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private var isCurrentlyPlaying: Bool {
-        if case .playing = phase {
-            return true
-        }
-        return false
+        isPlaying
     }
 
     private func prepareNowPlayingArtwork(for item: QueueItem) {
@@ -774,5 +888,66 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
         UserDefaults.standard.set(data, forKey: Storage.savedPlaybackSnapshotKey)
+    }
+
+    private func rebuildPlayerQueuePreservingCurrent(resumeAt seconds: TimeInterval, shouldPlay: Bool) {
+        guard let currentIndex, queue.indices.contains(currentIndex) else {
+            clearQueue()
+            return
+        }
+
+        let item = queue[currentIndex]
+        let savedScrobbleState = scrobbleEngine.state
+        player.pause()
+        player.removeAllItems()
+
+        for item in queue[currentIndex...] {
+            let playerItem = makePlayerItem(for: item)
+            if player.canInsert(playerItem, after: nil) {
+                player.insert(playerItem, after: nil)
+            }
+        }
+
+        let target = CMTime(seconds: max(0, seconds), preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        elapsedSeconds = max(0, seconds)
+        scrobbleEngine.restore(
+            track: item,
+            state: savedScrobbleState,
+            playbackTime: elapsedSeconds,
+            isPaused: !shouldPlay
+        )
+        phase = shouldPlay ? .playing(item) : .paused(item)
+        updateNowPlayingInfo(for: item, playbackRate: shouldPlay ? 1 : 0)
+        if shouldPlay {
+            configureAudioSession()
+            player.play()
+        }
+        persistPlaybackSnapshot()
+    }
+
+    private func recordRecentlyPlayed(_ item: QueueItem) {
+        let saved = SavedPlaybackTrack(queueItem: item)
+        recentlyPlayed.removeAll { $0.trackURN == saved.trackURN }
+        recentlyPlayed.insert(saved, at: 0)
+        if recentlyPlayed.count > 40 {
+            recentlyPlayed = Array(recentlyPlayed.prefix(40))
+        }
+        persistRecentlyPlayed()
+    }
+
+    private func persistRecentlyPlayed() {
+        guard let data = try? JSONEncoder().encode(recentlyPlayed) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Storage.recentlyPlayedKey)
+    }
+
+    private static func loadRecentlyPlayed() -> [SavedPlaybackTrack] {
+        guard let data = UserDefaults.standard.data(forKey: Storage.recentlyPlayedKey),
+              let decoded = try? JSONDecoder().decode([SavedPlaybackTrack].self, from: data) else {
+            return []
+        }
+        return decoded
     }
 }

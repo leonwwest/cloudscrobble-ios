@@ -3,13 +3,23 @@ import Foundation
 import SwiftUI
 
 struct PlayerView: View {
-    @ObservedObject var controller: PlayerScrobbleController
+    @ObservedObject var session: AppSessionViewModel
+    @ObservedObject private var controller: PlayerScrobbleController
+
+    @State private var isSeeking = false
+    @State private var seekValue: Double = 0
+
+    init(session: AppSessionViewModel) {
+        self.session = session
+        self.controller = session.playerController
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 nowPlayingCard
                 queueCard
+                recentlyPlayedCard
                 debugCard
             }
             .padding(.vertical, 10)
@@ -71,15 +81,49 @@ struct PlayerView: View {
                             .foregroundStyle(CloudTheme.muted)
                     }
 
-                    ProgressView(value: min(controller.elapsedSeconds, Double(max(item.durationSeconds, 1))), total: Double(max(item.durationSeconds, 1)))
+                    Slider(
+                        value: Binding(
+                            get: {
+                                isSeeking ? seekValue : min(controller.elapsedSeconds, Double(max(item.durationSeconds, 1)))
+                            },
+                            set: { newValue in
+                                seekValue = newValue
+                            }
+                        ),
+                        in: 0...Double(max(item.durationSeconds, 1)),
+                        onEditingChanged: { editing in
+                            isSeeking = editing
+                            if !editing {
+                                controller.seek(to: seekValue)
+                            }
+                        }
+                    )
                         .tint(CloudTheme.sky)
                     HStack {
-                        Text(timeLabel(controller.elapsedSeconds))
+                        Text(timeLabel(isSeeking ? seekValue : controller.elapsedSeconds))
                         Spacer()
                         Text(timeLabel(Double(item.durationSeconds)))
                     }
                     .font(.system(.caption2, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.muted)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            controller.seek(to: max(0, controller.elapsedSeconds - 15))
+                        } label: {
+                            Label("Back 15", systemImage: "gobackward.15")
+                        }
+                        .buttonStyle(PlayerModeButtonStyle(isActive: false))
+
+                        Spacer(minLength: 8)
+
+                        Button {
+                            controller.seek(to: min(Double(item.durationSeconds), controller.elapsedSeconds + 15))
+                        } label: {
+                            Label("Forward 15", systemImage: "goforward.15")
+                        }
+                        .buttonStyle(PlayerModeButtonStyle(isActive: false))
+                    }
 
                     HStack(spacing: 18) {
                         Spacer()
@@ -135,6 +179,16 @@ struct PlayerView: View {
                 Text("Queue")
                     .font(.system(.headline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
+                Spacer()
+                if !controller.queue.isEmpty {
+                    Button {
+                        controller.clearQueue()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(IconCircleButtonStyle())
+                    .accessibilityLabel("Clear queue")
+                }
             }
 
             if controller.queue.isEmpty {
@@ -143,42 +197,16 @@ struct PlayerView: View {
                     .foregroundStyle(CloudTheme.muted)
             } else {
                 ForEach(Array(controller.queue.enumerated()), id: \.element.id) { index, item in
-                    Button {
-                        controller.playQueueItem(at: index)
-                    } label: {
-                        HStack(spacing: 10) {
-                            artwork(for: item, size: 44)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                                    .foregroundStyle(CloudTheme.ink)
-                                    .lineLimit(1)
-                                Text(item.artistDisplay)
-                                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                                    .foregroundStyle(CloudTheme.muted)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            if controller.currentIndex == index {
-                                Image(systemName: "speaker.wave.2.fill")
-                                    .font(.system(.caption, design: .rounded).weight(.bold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule(style: .continuous)
-                                            .fill(CloudTheme.sky.opacity(0.18))
-                                    )
-                                    .foregroundStyle(CloudTheme.sky)
-                            } else {
-                                Image(systemName: "play.circle")
-                                    .font(.system(.title3, design: .rounded).weight(.semibold))
-                                    .foregroundStyle(CloudTheme.muted)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
+                    QueueItemRow(
+                        item: item,
+                        isCurrent: controller.currentIndex == index,
+                        canMoveUp: index > 0,
+                        canMoveDown: index < controller.queue.count - 1,
+                        onPlay: { controller.playQueueItem(at: index) },
+                        onMoveUp: { controller.moveQueueItem(from: index, to: index - 1) },
+                        onMoveDown: { controller.moveQueueItem(from: index, to: index + 1) },
+                        onRemove: { controller.removeQueueItem(at: index) }
+                    )
                 }
             }
         }
@@ -186,15 +214,52 @@ struct PlayerView: View {
     }
 
     @ViewBuilder
+    private var recentlyPlayedCard: some View {
+        if !controller.recentlyPlayed.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(CloudTheme.sky)
+                    Text("Recently Played")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .foregroundStyle(CloudTheme.ink)
+                    Spacer()
+                    Button {
+                        controller.clearRecentlyPlayed()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(IconCircleButtonStyle())
+                    .accessibilityLabel("Clear recently played")
+                }
+
+                ForEach(controller.recentlyPlayed.prefix(12)) { track in
+                    RecentlyPlayedRow(track: track) {
+                        Task { await session.play(savedTrack: track) }
+                    }
+                }
+            }
+            .cloudCard()
+        }
+    }
+
+    @ViewBuilder
     private var debugCard: some View {
         if !controller.debugStatus.isEmpty {
-            HStack(spacing: 8) {
-                Image(systemName: "dot.radiowaves.left.and.right")
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(CloudTheme.sky)
+                    Text("Last.fm Status")
+                        .font(.system(.caption, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
+                }
+
                 Text(controller.debugStatus)
-                    .lineLimit(2)
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .lineLimit(3)
             }
-            .font(.system(.caption, design: .rounded).weight(.semibold))
-            .foregroundStyle(CloudTheme.muted)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -268,6 +333,136 @@ struct PlayerView: View {
     private func timeLabel(_ seconds: Double) -> String {
         let clamped = max(0, Int(seconds))
         return "\(clamped / 60):\(String(format: "%02d", clamped % 60))"
+    }
+}
+
+private struct QueueItemRow: View {
+    let item: QueueItem
+    let isCurrent: Bool
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onPlay: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onPlay) {
+                HStack(spacing: 10) {
+                    queueArtwork
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(1)
+                        Text(item.artistDisplay)
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 4)
+
+            if isCurrent {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(.caption, design: .rounded).weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Capsule(style: .continuous).fill(CloudTheme.sky.opacity(0.18)))
+                    .foregroundStyle(CloudTheme.sky)
+            }
+
+            HStack(spacing: 4) {
+                Button(action: onMoveUp) {
+                    Image(systemName: "chevron.up")
+                }
+                .disabled(!canMoveUp)
+                .opacity(canMoveUp ? 1 : 0.35)
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Move up")
+
+                Button(action: onMoveDown) {
+                    Image(systemName: "chevron.down")
+                }
+                .disabled(!canMoveDown)
+                .opacity(canMoveDown ? 1 : 0.35)
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Move down")
+
+                Button(action: onRemove) {
+                    Image(systemName: "minus")
+                }
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Remove from queue")
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var queueArtwork: some View {
+        AsyncImage(url: item.artworkURL) { phase in
+            switch phase {
+            case .success(let image):
+                image.resizable().scaledToFill()
+            default:
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(CloudTheme.elevatedStrong)
+                    .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct RecentlyPlayedRow: View {
+    let track: SavedPlaybackTrack
+    let onPlay: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            AsyncImage(url: track.artworkURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(CloudTheme.elevatedStrong)
+                        .overlay(Image(systemName: "clock").foregroundStyle(CloudTheme.sky))
+                }
+            }
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title)
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
+                    .lineLimit(1)
+                Text(track.artistDisplay)
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button(action: onPlay) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(CloudTheme.sky))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Play \(track.title)")
+        }
+        .padding(.vertical, 5)
     }
 }
 

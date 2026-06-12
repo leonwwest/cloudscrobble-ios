@@ -148,6 +148,24 @@ final class SearchViewModel: ObservableObject {
         await session.play(tracks: contextTracks, startAt: startIndex)
     }
 
+    func playNext(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
+        await session.playNext(track: track)
+    }
+
+    func addToQueue(track: SCTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
+        await session.addToQueue(track: track)
+    }
+
     func open(playlist: SCPlaylist) async {
         guard let session, let api = session.apiClient else { return }
 

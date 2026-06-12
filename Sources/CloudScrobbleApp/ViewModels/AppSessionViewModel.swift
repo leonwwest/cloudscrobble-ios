@@ -321,19 +321,7 @@ final class AppSessionViewModel: ObservableObject {
         }
 
         do {
-            let stream = try await playbackResolver.resolvePlayableStream(for: track.urn)
-            let meta = MetadataMapper.mapLastFM(track: track)
-            let queueItem = QueueItem(
-                trackURN: track.urn,
-                title: track.title,
-                artistDisplay: track.user.username,
-                artworkURL: track.artworkURL,
-                permalinkURL: track.permalinkURL,
-                streamURL: stream.url,
-                streamHeaders: stream.headers,
-                durationSeconds: max(0, track.durationMs / 1000),
-                lastFM: meta
-            )
+            let queueItem = try await makeQueueItem(for: track, resolver: playbackResolver)
             playerController.loadQueue([queueItem], startAt: 0)
             statusMessage = "Playing \(track.title)"
         } catch {
@@ -368,20 +356,7 @@ final class AppSessionViewModel: ObservableObject {
             queueItems.reserveCapacity(boundedQueue.tracks.count)
 
             for track in boundedQueue.tracks {
-                let stream = try await playbackResolver.resolvePlayableStream(for: track.urn)
-                queueItems.append(
-                    QueueItem(
-                        trackURN: track.urn,
-                        title: track.title,
-                        artistDisplay: track.user.username,
-                        artworkURL: track.artworkURL,
-                        permalinkURL: track.permalinkURL,
-                        streamURL: stream.url,
-                        streamHeaders: stream.headers,
-                        durationSeconds: max(0, track.durationMs / 1000),
-                        lastFM: MetadataMapper.mapLastFM(track: track)
-                    )
-                )
+                queueItems.append(try await makeQueueItem(for: track, resolver: playbackResolver))
             }
 
             playerController.loadQueue(queueItems, startAt: boundedQueue.startAt)
@@ -389,6 +364,65 @@ final class AppSessionViewModel: ObservableObject {
         } catch {
             statusMessage = "Queue loading failed: \(error.localizedDescription)"
         }
+    }
+
+    func addToQueue(track: SCTrack) async {
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
+        guard let playbackResolver = activePlaybackResolver else {
+            statusMessage = "Playback resolver unavailable"
+            return
+        }
+
+        do {
+            let item = try await makeQueueItem(for: track, resolver: playbackResolver)
+            playerController.appendToQueue(item)
+            statusMessage = "Added to queue: \(track.title)"
+        } catch {
+            statusMessage = "Add to queue failed: \(error.localizedDescription)"
+        }
+    }
+
+    func playNext(track: SCTrack) async {
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
+        guard let playbackResolver = activePlaybackResolver else {
+            statusMessage = "Playback resolver unavailable"
+            return
+        }
+
+        do {
+            let item = try await makeQueueItem(for: track, resolver: playbackResolver)
+            playerController.playNext(item)
+            statusMessage = "Playing next: \(track.title)"
+        } catch {
+            statusMessage = "Play next failed: \(error.localizedDescription)"
+        }
+    }
+
+    func play(savedTrack: SavedPlaybackTrack) async {
+        guard let api = activeSoundCloudAPIClient else {
+            statusMessage = "Connect SoundCloud first"
+            return
+        }
+
+        do {
+            let track = try await api.track(urn: savedTrack.trackURN)
+            await play(track: track)
+        } catch {
+            statusMessage = "Recently played track unavailable: \(error.localizedDescription)"
+        }
+    }
+
+    func reconnectSoundCloud() async {
+        await disconnectSoundCloud()
+        await connectSoundCloud()
     }
 
     private func callbackScheme(from redirectURI: String) throws -> String {
@@ -442,6 +476,24 @@ final class AppSessionViewModel: ObservableObject {
         let lowerBound = clampedStart < queueLimit ? 0 : clampedStart
         let upperBound = min(tracks.count, lowerBound + queueLimit)
         return (Array(tracks[lowerBound..<upperBound]), clampedStart - lowerBound)
+    }
+
+    private func makeQueueItem(
+        for track: SCTrack,
+        resolver: PlaybackResolving
+    ) async throws -> QueueItem {
+        let stream = try await resolver.resolvePlayableStream(for: track.urn)
+        return QueueItem(
+            trackURN: track.urn,
+            title: track.title,
+            artistDisplay: track.user.username,
+            artworkURL: track.artworkURL,
+            permalinkURL: track.permalinkURL,
+            streamURL: stream.url,
+            streamHeaders: stream.headers,
+            durationSeconds: max(0, track.durationMs / 1000),
+            lastFM: MetadataMapper.mapLastFM(track: track)
+        )
     }
 
     private func restoreSavedPlaybackIfPossible() async {
