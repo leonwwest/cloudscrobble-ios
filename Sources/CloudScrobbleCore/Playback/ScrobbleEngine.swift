@@ -44,6 +44,14 @@ public final class ScrobbleEngine {
         previousPlaybackTime = nil
     }
 
+    public func restore(track: QueueItem, state restoredState: ScrobbleState, playbackTime: TimeInterval, isPaused: Bool) {
+        currentTrack = track
+        state = restoredState
+        thresholdSeconds = restoredState.scrobbleThresholdSeconds > 0 ? restoredState.scrobbleThresholdSeconds : nil
+        self.isPaused = isPaused
+        previousPlaybackTime = playbackTime
+    }
+
     public func stop() {
         currentTrack = nil
         thresholdSeconds = nil

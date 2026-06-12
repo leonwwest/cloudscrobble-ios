@@ -1,6 +1,12 @@
 import AVFoundation
 import Combine
 import Foundation
+#if canImport(MediaPlayer)
+import MediaPlayer
+#endif
+#if os(iOS) && canImport(UIKit)
+import UIKit
+#endif
 
 public enum PlaybackPhase: Equatable {
     case idle
@@ -10,37 +16,131 @@ public enum PlaybackPhase: Equatable {
     case failed(String)
 }
 
+public enum PlaybackRepeatMode: String, CaseIterable, Sendable {
+    case off
+    case all
+    case one
+}
+
 @MainActor
 public final class PlayerScrobbleController: ObservableObject {
+    private enum Storage {
+        static let savedPlaybackSnapshotKey = "cloudscrobble.savedPlaybackSnapshot.v1"
+    }
+
     @Published public private(set) var phase: PlaybackPhase = .idle
     @Published public private(set) var queue: [QueueItem] = []
     @Published public private(set) var currentIndex: Int?
     @Published public private(set) var elapsedSeconds: TimeInterval = 0
     @Published public private(set) var debugStatus: String = ""
+    @Published public private(set) var isShuffleEnabled = false
+    @Published public private(set) var repeatMode: PlaybackRepeatMode = .off
 
-    private let player = AVPlayer()
+    private let player = AVQueuePlayer()
     private let scrobbleEngine = ScrobbleEngine()
     private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
+    private var failedObserver: NSObjectProtocol?
+    private var stalledObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+    private var debugDismissalTask: Task<Void, Never>?
+    private var orderedQueue: [QueueItem] = []
+    private var shouldResumeAfterInterruption = false
+#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
+    private var nowPlayingArtworkTask: Task<Void, Never>?
+    private var nowPlayingArtworkTrackURN: String?
+    private var nowPlayingArtworkURL: URL?
+    private var nowPlayingArtwork: MPMediaItemArtwork?
+#endif
 
-    private let lastFMScrobbler: LastFMScrobbleSending?
+    private var lastFMScrobbler: LastFMScrobbleSending?
+
+    public var hasLoadedQueue: Bool {
+        !queue.isEmpty
+    }
 
     public init(lastFMScrobbler: LastFMScrobbleSending?) {
         self.lastFMScrobbler = lastFMScrobbler
+        player.actionAtItemEnd = .advance
+        player.automaticallyWaitsToMinimizeStalling = true
+        configureAudioSession()
         installTimeObserver()
         observeTrackEnd()
+        observePlaybackProblems()
+        observeAudioSession()
+        configureRemoteCommands()
+    }
+
+    public func setLastFMScrobbler(_ scrobbler: LastFMScrobbleSending?) {
+        lastFMScrobbler = scrobbler
+        if scrobbler == nil, debugStatus.hasPrefix("Scrobble") || debugStatus == "Now Playing sent" {
+            debugStatus = "Last.fm not connected"
+        }
     }
 
     public func loadQueue(_ items: [QueueItem], startAt index: Int = 0) {
-        queue = items
+        orderedQueue = items
+        let prepared = preparedQueue(items, startAt: index)
+        queue = prepared.items
         currentIndex = nil
-        guard items.indices.contains(index) else {
+        guard !queue.isEmpty else {
             phase = .idle
+            elapsedSeconds = 0
+            scrobbleEngine.stop()
+            clearNowPlayingInfo()
+            clearSavedPlaybackSnapshot()
             return
         }
 
         Task {
-            await playIndex(index)
+            await rebuildPlayerQueue(startAt: prepared.startIndex)
         }
+    }
+
+    public func toggleShuffle() {
+        isShuffleEnabled.toggle()
+
+        guard let currentIndex, queue.indices.contains(currentIndex) else {
+            return
+        }
+
+        let current = queue[currentIndex]
+
+        if isShuffleEnabled {
+            let remaining = orderedQueue.filter { $0.trackURN != current.trackURN }
+            queue = [current] + remaining.shuffled()
+            persistPlaybackSnapshot()
+            Task {
+                await rebuildPlayerQueue(startAt: 0)
+            }
+        } else {
+            queue = orderedQueue.isEmpty ? queue : orderedQueue
+            let restoredIndex = queue.firstIndex(where: { $0.trackURN == current.trackURN }) ?? 0
+            persistPlaybackSnapshot()
+            Task {
+                await rebuildPlayerQueue(startAt: restoredIndex)
+            }
+        }
+    }
+
+    public func playQueueItem(at index: Int) {
+        guard queue.indices.contains(index) else { return }
+        Task {
+            await rebuildPlayerQueue(startAt: index)
+        }
+    }
+
+    public func cycleRepeatMode() {
+        switch repeatMode {
+        case .off:
+            repeatMode = .all
+        case .all:
+            repeatMode = .one
+        case .one:
+            repeatMode = .off
+        }
+        persistPlaybackSnapshot()
     }
 
     public func togglePlayback() {
@@ -49,10 +149,15 @@ public final class PlayerScrobbleController: ObservableObject {
             player.pause()
             scrobbleEngine.pause()
             phase = .paused(item)
+            updateNowPlayingInfo(for: item, playbackRate: 0)
+            persistPlaybackSnapshot()
         case .paused(let item):
+            configureAudioSession()
             player.play()
             scrobbleEngine.resume()
             phase = .playing(item)
+            updateNowPlayingInfo(for: item, playbackRate: 1)
+            persistPlaybackSnapshot()
         default:
             break
         }
@@ -62,53 +167,366 @@ public final class PlayerScrobbleController: ObservableObject {
         let target = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         player.seek(to: target)
         elapsedSeconds = seconds
+        if case .playing(let item) = phase {
+            updateNowPlayingInfo(for: item, playbackRate: 1)
+        } else if case .paused(let item) = phase {
+            updateNowPlayingInfo(for: item, playbackRate: 0)
+        }
+        persistPlaybackSnapshot()
+    }
+
+    public func savedPlaybackSnapshot() -> SavedPlaybackSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: Storage.savedPlaybackSnapshotKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(SavedPlaybackSnapshot.self, from: data)
+    }
+
+    public func clearSavedPlaybackSnapshot() {
+        UserDefaults.standard.removeObject(forKey: Storage.savedPlaybackSnapshotKey)
+    }
+
+    public func restoreSavedQueue(_ items: [QueueItem], from snapshot: SavedPlaybackSnapshot) {
+        guard items.indices.contains(snapshot.currentIndex) else {
+            clearSavedPlaybackSnapshot()
+            return
+        }
+
+        orderedQueue = items
+        queue = items
+        isShuffleEnabled = snapshot.isShuffleEnabled
+        repeatMode = PlaybackRepeatMode(rawValue: snapshot.repeatModeRawValue) ?? .off
+        currentIndex = snapshot.currentIndex
+        elapsedSeconds = max(0, snapshot.elapsedSeconds)
+        player.removeAllItems()
+
+        for item in queue[snapshot.currentIndex...] {
+            let playerItem = makePlayerItem(for: item)
+            if player.canInsert(playerItem, after: nil) {
+                player.insert(playerItem, after: nil)
+            }
+        }
+
+        let item = queue[snapshot.currentIndex]
+        let target = CMTime(seconds: elapsedSeconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        scrobbleEngine.restore(
+            track: item,
+            state: snapshot.scrobbleState,
+            playbackTime: elapsedSeconds,
+            isPaused: true
+        )
+        phase = .paused(item)
+        updateNowPlayingInfo(for: item, playbackRate: 0)
+        persistPlaybackSnapshot()
     }
 
     public func next() {
         guard let currentIndex else { return }
         let nextIndex = currentIndex + 1
-        guard queue.indices.contains(nextIndex) else { return }
+        guard queue.indices.contains(nextIndex) else {
+            if repeatMode == .all {
+                Task { await rebuildPlayerQueue(startAt: 0) }
+            }
+            return
+        }
         Task {
-            await playIndex(nextIndex)
+            player.advanceToNextItem()
+            await startTrackState(at: nextIndex, playbackRate: 1)
+            configureAudioSession()
+            player.play()
         }
     }
 
     public func previous() {
         guard let currentIndex else { return }
-        let previousIndex = max(0, currentIndex - 1)
+        let previousIndex: Int
+        if currentIndex == 0, repeatMode == .all {
+            previousIndex = max(0, queue.count - 1)
+        } else {
+            previousIndex = max(0, currentIndex - 1)
+        }
         Task {
-            await playIndex(previousIndex)
+            await rebuildPlayerQueue(startAt: previousIndex)
         }
     }
 
-    private func playIndex(_ index: Int) async {
+    private func rebuildPlayerQueue(startAt index: Int) async {
         guard queue.indices.contains(index) else { return }
-        let item = queue[index]
 
         phase = .loading
+
+        configureAudioSession()
+        player.volume = 1
+        player.removeAllItems()
+
+        for item in queue[index...] {
+            let playerItem = makePlayerItem(for: item)
+            if player.canInsert(playerItem, after: nil) {
+                player.insert(playerItem, after: nil)
+            }
+        }
+
+        await startTrackState(at: index, playbackRate: 1)
+        persistPlaybackSnapshot()
+        player.play()
+    }
+
+    private func startTrackState(at index: Int, playbackRate: Double) async {
+        guard queue.indices.contains(index) else {
+            scrobbleEngine.stop()
+            phase = .idle
+            currentIndex = nil
+            elapsedSeconds = 0
+            clearNowPlayingInfo()
+            clearSavedPlaybackSnapshot()
+            return
+        }
+
+        let item = queue[index]
         currentIndex = index
         elapsedSeconds = 0
 
         scrobbleEngine.stop()
-        _ = scrobbleEngine.start(track: item)
+        let events = scrobbleEngine.start(track: item)
 
-        player.replaceCurrentItem(with: AVPlayerItem(url: item.streamURL))
-        player.play()
-        phase = .playing(item)
+        phase = playbackRate == 0 ? .paused(item) : .playing(item)
+        updateNowPlayingInfo(for: item, playbackRate: playbackRate)
+        persistPlaybackSnapshot()
 
-        await dispatch(events: [.sendNowPlaying(meta: item.lastFM, duration: item.durationSeconds)])
+        await dispatch(events: events)
+    }
+
+    private func makePlayerItem(for item: QueueItem) -> AVPlayerItem {
+        guard !item.streamHeaders.isEmpty else {
+            return AVPlayerItem(url: item.streamURL)
+        }
+
+        let asset = AVURLAsset(
+            url: item.streamURL,
+            options: ["AVURLAssetHTTPHeaderFieldsKey": item.streamHeaders]
+        )
+        return AVPlayerItem(asset: asset)
+    }
+
+    private func configureAudioSession() {
+#if os(iOS)
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [])
+            try session.setActive(true)
+        } catch {
+            debugStatus = "Audio session error: \(error.localizedDescription)"
+        }
+#endif
     }
 
     private func observeTrackEnd() {
-        NotificationCenter.default.addObserver(
+        endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.next()
+                await self?.handleCurrentTrackEnded()
             }
         }
+    }
+
+    private func observePlaybackProblems() {
+        failedObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let errorMessage = (notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error)?
+                .localizedDescription
+            Task { @MainActor [weak self] in
+                await self?.handlePlaybackProblem(errorMessage: errorMessage)
+            }
+        }
+
+        stalledObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.setDebugStatus("Buffering stream...", autoDismissAfter: 2_500_000_000)
+            }
+        }
+    }
+
+    private func observeAudioSession() {
+#if os(iOS)
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let typeRaw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let optionRaw = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
+            Task { @MainActor [weak self] in
+                self?.handleAudioInterruption(typeRaw: typeRaw, optionRaw: optionRaw)
+            }
+        }
+
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let reasonRaw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            Task { @MainActor [weak self] in
+                self?.handleRouteChange(reasonRaw: reasonRaw)
+            }
+        }
+#endif
+    }
+
+    private func handleAudioInterruption(typeRaw: UInt?, optionRaw: UInt?) {
+#if os(iOS)
+        guard let typeRaw,
+              let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            shouldResumeAfterInterruption = isCurrentlyPlaying
+            player.pause()
+            scrobbleEngine.pause()
+            if case .playing(let item) = phase {
+                phase = .paused(item)
+                updateNowPlayingInfo(for: item, playbackRate: 0)
+                persistPlaybackSnapshot()
+            }
+            setDebugStatus("Audio interrupted", autoDismissAfter: 3_000_000_000)
+        case .ended:
+            configureAudioSession()
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionRaw ?? 0)
+            guard shouldResumeAfterInterruption, options.contains(.shouldResume) else {
+                shouldResumeAfterInterruption = false
+                return
+            }
+
+            shouldResumeAfterInterruption = false
+            if case .paused(let item) = phase {
+                player.play()
+                scrobbleEngine.resume()
+                phase = .playing(item)
+                updateNowPlayingInfo(for: item, playbackRate: 1)
+                persistPlaybackSnapshot()
+                setDebugStatus("Audio resumed", autoDismissAfter: 2_500_000_000)
+            }
+        @unknown default:
+            break
+        }
+#endif
+    }
+
+    private func handleRouteChange(reasonRaw: UInt?) {
+#if os(iOS)
+        guard let reasonRaw,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw) else {
+            return
+        }
+
+        switch reason {
+        case .oldDeviceUnavailable:
+            player.pause()
+            scrobbleEngine.pause()
+            if case .playing(let item) = phase {
+                phase = .paused(item)
+                updateNowPlayingInfo(for: item, playbackRate: 0)
+                persistPlaybackSnapshot()
+            }
+            setDebugStatus("Audio output changed", autoDismissAfter: 3_500_000_000)
+        case .newDeviceAvailable, .categoryChange, .override:
+            configureAudioSession()
+        default:
+            break
+        }
+#endif
+    }
+
+    private func handleCurrentTrackEnded() async {
+        guard let finishedIndex = currentIndex else { return }
+
+        if repeatMode == .one {
+            await rebuildPlayerQueue(startAt: finishedIndex)
+            return
+        }
+
+        let nextIndex = finishedIndex + 1
+
+        guard queue.indices.contains(nextIndex) else {
+            if repeatMode == .all, !queue.isEmpty {
+                await rebuildPlayerQueue(startAt: 0)
+                return
+            }
+
+            scrobbleEngine.stop()
+            phase = .idle
+            currentIndex = nil
+            elapsedSeconds = 0
+            clearNowPlayingInfo()
+            clearSavedPlaybackSnapshot()
+            return
+        }
+
+        await startTrackState(at: nextIndex, playbackRate: 1)
+        configureAudioSession()
+        player.play()
+    }
+
+    private func handlePlaybackProblem(errorMessage: String?) async {
+        let failedTitle: String?
+        if let currentIndex, queue.indices.contains(currentIndex) {
+            failedTitle = queue[currentIndex].title
+        } else {
+            failedTitle = nil
+        }
+
+        if let failedTitle {
+            setDebugStatus("Track not playable, skipping: \(failedTitle)")
+        } else {
+            setDebugStatus("Track not playable")
+        }
+
+        guard let currentIndex else {
+            phase = .failed(errorMessage ?? "Track not playable.")
+            return
+        }
+
+        let nextIndex = currentIndex + 1
+        if queue.indices.contains(nextIndex) {
+            player.advanceToNextItem()
+            await startTrackState(at: nextIndex, playbackRate: 1)
+            configureAudioSession()
+            player.play()
+        } else if repeatMode == .all, !queue.isEmpty {
+            await rebuildPlayerQueue(startAt: 0)
+        } else {
+            scrobbleEngine.stop()
+            phase = .failed(errorMessage ?? "Track not playable.")
+            clearNowPlayingInfo()
+            clearSavedPlaybackSnapshot()
+        }
+    }
+
+    private func preparedQueue(_ items: [QueueItem], startAt index: Int) -> (items: [QueueItem], startIndex: Int) {
+        guard items.indices.contains(index) else { return ([], 0) }
+        let selected = items[index]
+        let remaining = items.enumerated()
+            .filter { $0.offset != index }
+            .map(\.element)
+
+        if isShuffleEnabled {
+            return ([selected] + remaining.shuffled(), 0)
+        }
+
+        return (items, index)
     }
 
     private func installTimeObserver() {
@@ -123,8 +541,167 @@ public final class PlayerScrobbleController: ObservableObject {
 
     private func handleTick(time: TimeInterval) async {
         elapsedSeconds = max(0, time)
+        if case .playing(let item) = phase {
+            updateNowPlayingInfo(for: item, playbackRate: 1)
+        }
         let events = scrobbleEngine.tick(playbackTime: elapsedSeconds)
+        persistPlaybackSnapshot()
         await dispatch(events: events)
+    }
+
+    private func configureRemoteCommands() {
+#if os(iOS) && canImport(MediaPlayer)
+        let commandCenter = MPRemoteCommandCenter.shared()
+
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                if case .paused = self?.phase {
+                    self?.togglePlayback()
+                }
+            }
+            return .success
+        }
+
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                if case .playing = self?.phase {
+                    self?.togglePlayback()
+                }
+            }
+            return .success
+        }
+
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.togglePlayback()
+            }
+            return .success
+        }
+
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.next()
+            }
+            return .success
+        }
+
+        commandCenter.previousTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.previous()
+            }
+            return .success
+        }
+
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+
+            Task { @MainActor [weak self] in
+                self?.seek(to: event.positionTime)
+            }
+            return .success
+        }
+#endif
+    }
+
+    private func updateNowPlayingInfo(for item: QueueItem, playbackRate: Double) {
+#if os(iOS) && canImport(MediaPlayer)
+        prepareNowPlayingArtwork(for: item)
+
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: item.title,
+            MPMediaItemPropertyArtist: item.artistDisplay,
+            MPMediaItemPropertyPlaybackDuration: Double(max(item.durationSeconds, 1)),
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsedSeconds,
+            MPNowPlayingInfoPropertyPlaybackRate: playbackRate
+        ]
+
+#if canImport(UIKit)
+        if nowPlayingArtworkTrackURN == item.trackURN, let nowPlayingArtwork {
+            info[MPMediaItemPropertyArtwork] = nowPlayingArtwork
+        }
+#endif
+
+        if let permalinkURL = item.permalinkURL {
+            info[MPNowPlayingInfoPropertyAssetURL] = permalinkURL
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+#endif
+    }
+
+    private func clearNowPlayingInfo() {
+#if os(iOS) && canImport(MediaPlayer)
+        clearNowPlayingArtwork()
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+#endif
+    }
+
+    private var isCurrentlyPlaying: Bool {
+        if case .playing = phase {
+            return true
+        }
+        return false
+    }
+
+    private func prepareNowPlayingArtwork(for item: QueueItem) {
+#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
+        guard nowPlayingArtworkTrackURN != item.trackURN || nowPlayingArtworkURL != item.artworkURL else {
+            return
+        }
+
+        nowPlayingArtworkTask?.cancel()
+        nowPlayingArtworkTrackURN = item.trackURN
+        nowPlayingArtworkURL = item.artworkURL
+        nowPlayingArtwork = nil
+
+        guard let artworkURL = item.artworkURL else { return }
+
+        nowPlayingArtworkTask = Task { [weak self, trackURN = item.trackURN, artworkURL] in
+            do {
+                let (data, response) = try await URLSession.shared.data(from: artworkURL)
+                guard !Task.isCancelled,
+                      (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
+                      let image = UIImage(data: data) else {
+                    return
+                }
+
+                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                await MainActor.run { [weak self] in
+                    guard self?.nowPlayingArtworkTrackURN == trackURN,
+                          self?.nowPlayingArtworkURL == artworkURL else {
+                        return
+                    }
+
+                    self?.nowPlayingArtwork = artwork
+                    if case .playing(let current) = self?.phase, current.trackURN == trackURN {
+                        self?.updateNowPlayingInfo(for: current, playbackRate: 1)
+                    } else if case .paused(let current) = self?.phase, current.trackURN == trackURN {
+                        self?.updateNowPlayingInfo(for: current, playbackRate: 0)
+                    }
+                }
+            } catch {
+                // Artwork is cosmetic; playback should continue if loading fails.
+            }
+        }
+#endif
+    }
+
+    private func clearNowPlayingArtwork() {
+#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
+        nowPlayingArtworkTask?.cancel()
+        nowPlayingArtworkTask = nil
+        nowPlayingArtworkTrackURN = nil
+        nowPlayingArtworkURL = nil
+        nowPlayingArtwork = nil
+#endif
     }
 
     private func dispatch(events: [ScrobbleEngineEvent]) async {
@@ -140,15 +717,54 @@ public final class PlayerScrobbleController: ObservableObject {
                 switch event {
                 case .sendNowPlaying(let meta, let duration):
                     try await lastFMScrobbler.updateNowPlaying(meta: meta, durationSeconds: duration)
-                    debugStatus = "Now Playing sent"
+                    setDebugStatus("Now Playing sent", autoDismissAfter: 2_800_000_000)
                 case .sendScrobble(let meta, let timestamp):
                     try await lastFMScrobbler.scrobble(meta: meta, timestamp: timestamp)
                     let pending = await lastFMScrobbler.pendingScrobbleCount()
-                    debugStatus = pending == 0 ? "Track scrobbled" : "Scrobble queued (\(pending) pending)"
+                    setDebugStatus(
+                        pending == 0 ? "Track scrobbled" : "Scrobble queued (\(pending) pending)",
+                        autoDismissAfter: pending == 0 ? 3_200_000_000 : nil
+                    )
                 }
             } catch {
-                debugStatus = "Scrobble error: \(error.localizedDescription)"
+                setDebugStatus("Scrobble error: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func setDebugStatus(_ message: String, autoDismissAfter delay: UInt64? = nil) {
+        debugDismissalTask?.cancel()
+        debugStatus = message
+
+        guard let delay else {
+            debugDismissalTask = nil
+            return
+        }
+
+        debugDismissalTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, self?.debugStatus == message else { return }
+            self?.debugStatus = ""
+        }
+    }
+
+    private func persistPlaybackSnapshot() {
+        guard let currentIndex, queue.indices.contains(currentIndex), !queue.isEmpty else {
+            return
+        }
+
+        let snapshot = SavedPlaybackSnapshot(
+            queue: queue.map(SavedPlaybackTrack.init(queueItem:)),
+            currentIndex: currentIndex,
+            elapsedSeconds: elapsedSeconds,
+            scrobbleState: scrobbleEngine.state,
+            repeatModeRawValue: repeatMode.rawValue,
+            isShuffleEnabled: isShuffleEnabled
+        )
+
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Storage.savedPlaybackSnapshotKey)
     }
 }

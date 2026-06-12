@@ -35,7 +35,7 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
 - `/ios` - generated Xcode iOS app project (`CloudScrobbleiOS.xcodeproj`)
 
 ## Environment variables (app)
-Set these before running the app target:
+Set these in the project-root `.env` before running the app target:
 
 ```bash
 export SOUNDCLOUD_CLIENT_ID="..."
@@ -44,6 +44,8 @@ export SOUNDCLOUD_TOKEN_BROKER_BASE_URL="http://localhost:8787"
 export LASTFM_API_KEY="..."
 export LASTFM_API_SECRET="..."
 ```
+
+Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in `backend/.env`, because the iOS app talks to the local token broker instead of sending the SoundCloud secret from the app.
 
 ## Run backend
 ```bash
@@ -82,6 +84,7 @@ One-click alternative:
 ```
 
 This syncs `.env` to the Xcode scheme and opens the iOS project.
+The helper writes env vars to an untracked user scheme under `xcuserdata`, not the shared scheme committed to the repo.
 
 ## SoundCloud OAuth checklist
 If "Connect SoundCloud" fails in-app, verify:

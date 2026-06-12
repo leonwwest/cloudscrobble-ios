@@ -62,14 +62,17 @@ func TestExchangeEndpointRequiresFields(t *testing.T) {
 
 func TestClientCredentialsProxiesUpstreamJSON(t *testing.T) {
 	var gotGrantType, gotClientID, gotSecret string
+	var gotFormClientID, gotFormSecret string
+	var gotBasicAuth bool
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("parse form failed: %v", err)
 		}
 		gotGrantType = r.Form.Get("grant_type")
-		gotClientID = r.Form.Get("client_id")
-		gotSecret = r.Form.Get("client_secret")
+		gotFormClientID = r.Form.Get("client_id")
+		gotFormSecret = r.Form.Get("client_secret")
+		gotClientID, gotSecret, gotBasicAuth = r.BasicAuth()
 
 		writeJSON(w, http.StatusOK, map[string]string{"access_token": "token123"})
 	}))
@@ -92,8 +95,14 @@ func TestClientCredentialsProxiesUpstreamJSON(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if gotGrantType != "client_credentials" || gotClientID != "my_id" || gotSecret != "my_secret" {
-		t.Fatalf("unexpected upstream form values: grant=%q id=%q secret=%q", gotGrantType, gotClientID, gotSecret)
+	if gotGrantType != "client_credentials" {
+		t.Fatalf("unexpected grant type: %q", gotGrantType)
+	}
+	if gotFormClientID != "" || gotFormSecret != "" {
+		t.Fatalf("client credentials must not be sent in form body: id=%q secret=%q", gotFormClientID, gotFormSecret)
+	}
+	if !gotBasicAuth || gotClientID != "my_id" || gotSecret != "my_secret" {
+		t.Fatalf("unexpected upstream basic auth: ok=%v id=%q secret=%q", gotBasicAuth, gotClientID, gotSecret)
 	}
 
 	var payload map[string]string

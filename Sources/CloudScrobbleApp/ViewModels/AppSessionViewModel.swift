@@ -1,38 +1,6 @@
 import CloudScrobbleCore
 import Foundation
 
-actor MutableLastFMScrobbler: LastFMScrobbleSending {
-    var wrapped: LastFMScrobbleSending?
-
-    init(wrapped: LastFMScrobbleSending?) {
-        self.wrapped = wrapped
-    }
-
-    func setWrapped(_ wrapped: LastFMScrobbleSending?) {
-        self.wrapped = wrapped
-    }
-
-    func updateNowPlaying(meta: LastFMTrackMeta, durationSeconds: Int?) async throws {
-        guard let wrapped else { return }
-        try await wrapped.updateNowPlaying(meta: meta, durationSeconds: durationSeconds)
-    }
-
-    func scrobble(meta: LastFMTrackMeta, timestamp: Int) async throws {
-        guard let wrapped else { return }
-        try await wrapped.scrobble(meta: meta, timestamp: timestamp)
-    }
-
-    func flushPendingScrobbles() async throws {
-        guard let wrapped else { return }
-        try await wrapped.flushPendingScrobbles()
-    }
-
-    func pendingScrobbleCount() async -> Int {
-        guard let wrapped else { return 0 }
-        return await wrapped.pendingScrobbleCount()
-    }
-}
-
 @MainActor
 final class AppSessionViewModel: ObservableObject {
     private struct PendingSoundCloudAuthorization {
@@ -46,7 +14,11 @@ final class AppSessionViewModel: ObservableObject {
     @Published var soundCloudMockMode = false
     @Published var lastFMConnected = false
     @Published var isBusy = false
-    @Published var statusMessage: String?
+    @Published var statusMessage: String? {
+        didSet {
+            scheduleStatusDismissal(for: statusMessage)
+        }
+    }
 
     let playerController: PlayerScrobbleController
 
@@ -61,12 +33,13 @@ final class AppSessionViewModel: ObservableObject {
     private var activeSoundCloudAPIClient: SoundCloudAPIClienting?
     private var activePlaybackResolver: PlaybackResolving?
 
-    private let lastFMAuthService: LastFMAuthService?
-    private let lastFMScrobbleService: LastFMScrobbleService?
-    private let mutableScrobbler: MutableLastFMScrobbler
+    private let lastFMAuthService: LastFMAuthenticating?
+    private let lastFMScrobbleService: LastFMScrobbleSending?
     private var pendingSoundCloudAuthorization: PendingSoundCloudAuthorization?
+    private var statusDismissalTask: Task<Void, Never>?
+    private var didAttemptPlaybackRestore = false
 
-    init(config: AppConfig? = AppConfig.loadFromEnvironment()) {
+    init(config: AppConfig? = AppConfig.load()) {
         self.config = config
 
         let keychain = KeychainStore(service: "com.cloudscrobble.private")
@@ -86,13 +59,12 @@ final class AppSessionViewModel: ObservableObject {
             let soundCloudAPIClient = SoundCloudAPIClient(tokenProvider: tokenProvider)
             let playbackResolver = PlaybackResolver(api: soundCloudAPIClient)
 
-            let lastFMConfig = LastFMConfiguration(
-                apiKey: config.lastFMAPIKey,
-                apiSecret: config.lastFMAPISecret
+            let lastFMAuthService = LastFMProxyAuthService(
+                baseURL: config.tokenBrokerBaseURL,
+                keychain: keychain
             )
-            let lastFMAuthService = LastFMAuthService(config: lastFMConfig, keychain: keychain)
-            let lastFMScrobbleService = LastFMScrobbleService(
-                config: lastFMConfig,
+            let lastFMScrobbleService = LastFMProxyScrobbleService(
+                baseURL: config.tokenBrokerBaseURL,
                 authService: lastFMAuthService,
                 keychain: keychain
             )
@@ -102,27 +74,24 @@ final class AppSessionViewModel: ObservableObject {
             self.realPlaybackResolver = playbackResolver
             self.lastFMAuthService = lastFMAuthService
             self.lastFMScrobbleService = lastFMScrobbleService
-
-            self.mutableScrobbler = MutableLastFMScrobbler(wrapped: lastFMScrobbleService)
         } else {
             self.soundCloudAuthService = nil
             self.realSoundCloudAPIClient = nil
             self.realPlaybackResolver = nil
             self.lastFMAuthService = nil
             self.lastFMScrobbleService = nil
-            self.mutableScrobbler = MutableLastFMScrobbler(wrapped: nil)
-            let missing = AppConfig.missingEnvironmentKeys()
+            let missing = AppConfig.missingConfigurationKeys()
             if missing.isEmpty {
                 statusMessage = "Missing app configuration. Demo Mode can still be used without SoundCloud API."
             } else {
-                statusMessage = "Missing scheme env vars: \(missing.joined(separator: ", ")). Demo Mode is available."
+                statusMessage = "Missing app config values: \(missing.joined(separator: ", ")). Demo Mode is available."
             }
         }
 
         self.activeSoundCloudAPIClient = nil
         self.activePlaybackResolver = nil
 
-        playerController = PlayerScrobbleController(lastFMScrobbler: mutableScrobbler)
+        playerController = PlayerScrobbleController(lastFMScrobbler: nil)
 
         Task {
             await refreshConnectionState()
@@ -133,9 +102,38 @@ final class AppSessionViewModel: ObservableObject {
         config != nil
     }
 
+    var tokenBrokerDisplayURL: String {
+        config?.tokenBrokerBaseURL.absoluteString ?? "Missing"
+    }
+
+    var soundCloudModeLabel: String {
+        if soundCloudMockMode {
+            return "Demo"
+        }
+        if soundCloudPublicMode {
+            return "Public"
+        }
+        return soundCloudConnected ? "Authenticated" : "Off"
+    }
+
     var apiClient: SoundCloudAPIClienting? {
         guard soundCloudConnected else { return nil }
         return activeSoundCloudAPIClient
+    }
+
+    func clearStatusMessage() {
+        statusMessage = nil
+    }
+
+    func pendingLastFMScrobbleCount() async -> Int {
+        guard let lastFMScrobbleService else { return 0 }
+        return await lastFMScrobbleService.pendingScrobbleCount()
+    }
+
+    func resetConnections() async {
+        await disconnectSoundCloud()
+        await disconnectLastFM()
+        statusMessage = "Connections reset"
     }
 
     func refreshConnectionState() async {
@@ -153,9 +151,14 @@ final class AppSessionViewModel: ObservableObject {
 
         guard let lastFMAuthService else {
             lastFMConnected = false
+            playerController.setLastFMScrobbler(nil)
             return
         }
-        lastFMConnected = await lastFMAuthService.cachedSession() != nil
+        let hasLastFMSession = await lastFMAuthService.cachedSession() != nil
+        lastFMConnected = hasLastFMSession
+        playerController.setLastFMScrobbler(hasLastFMSession ? lastFMScrobbleService : nil)
+
+        await restoreSavedPlaybackIfPossible()
     }
 
     func connectSoundCloud() async {
@@ -212,6 +215,7 @@ final class AppSessionViewModel: ObservableObject {
             _ = try await soundCloudAuthService.fetchClientCredentialsToken()
             pendingSoundCloudAuthorization = nil
             activateRealMode(isPublicMode: true)
+            await restoreSavedPlaybackIfPossible()
             statusMessage = "SoundCloud connected in Public Mode (no /me library)."
         } catch {
             statusMessage = "Public Mode connection failed: \(error.localizedDescription)"
@@ -260,6 +264,7 @@ final class AppSessionViewModel: ObservableObject {
 
             pendingSoundCloudAuthorization = nil
             activateRealMode(isPublicMode: false)
+            await restoreSavedPlaybackIfPossible()
             statusMessage = "SoundCloud connected"
         } catch {
             pendingSoundCloudAuthorization = nil
@@ -268,7 +273,7 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func connectLastFM(username: String, password: String) async {
-        guard let lastFMAuthService else {
+        guard let lastFMAuthService, let lastFMScrobbleService else {
             statusMessage = "Missing Last.fm configuration."
             return
         }
@@ -278,8 +283,9 @@ final class AppSessionViewModel: ObservableObject {
 
         do {
             _ = try await lastFMAuthService.authenticate(username: username, password: password)
-            try await mutableScrobbler.flushPendingScrobbles()
-            let pending = await mutableScrobbler.pendingScrobbleCount()
+            playerController.setLastFMScrobbler(lastFMScrobbleService)
+            try await lastFMScrobbleService.flushPendingScrobbles()
+            let pending = await lastFMScrobbleService.pendingScrobbleCount()
             lastFMConnected = true
             statusMessage = pending == 0 ? "Last.fm connected" : "Last.fm connected (\(pending) pending scrobbles)"
         } catch {
@@ -292,6 +298,7 @@ final class AppSessionViewModel: ObservableObject {
             try? await soundCloudAuthService.clearCachedToken()
         }
         pendingSoundCloudAuthorization = nil
+        playerController.clearSavedPlaybackSnapshot()
         deactivateSoundCloudMode()
     }
 
@@ -299,6 +306,7 @@ final class AppSessionViewModel: ObservableObject {
         guard let lastFMAuthService else { return }
         try? await lastFMAuthService.clearSession()
         lastFMConnected = false
+        playerController.setLastFMScrobbler(nil)
     }
 
     func play(track: SCTrack) async {
@@ -308,7 +316,7 @@ final class AppSessionViewModel: ObservableObject {
         }
 
         do {
-            let streamURL = try await playbackResolver.resolvePlayableURL(for: track.urn)
+            let stream = try await playbackResolver.resolvePlayableStream(for: track.urn)
             let meta = MetadataMapper.mapLastFM(track: track)
             let queueItem = QueueItem(
                 trackURN: track.urn,
@@ -316,7 +324,8 @@ final class AppSessionViewModel: ObservableObject {
                 artistDisplay: track.user.username,
                 artworkURL: track.artworkURL,
                 permalinkURL: track.permalinkURL,
-                streamURL: streamURL,
+                streamURL: stream.url,
+                streamHeaders: stream.headers,
                 durationSeconds: max(0, track.durationMs / 1000),
                 lastFM: meta
             )
@@ -338,7 +347,7 @@ final class AppSessionViewModel: ObservableObject {
             queueItems.reserveCapacity(tracks.count)
 
             for track in tracks {
-                let streamURL = try await playbackResolver.resolvePlayableURL(for: track.urn)
+                let stream = try await playbackResolver.resolvePlayableStream(for: track.urn)
                 queueItems.append(
                     QueueItem(
                         trackURN: track.urn,
@@ -346,7 +355,8 @@ final class AppSessionViewModel: ObservableObject {
                         artistDisplay: track.user.username,
                         artworkURL: track.artworkURL,
                         permalinkURL: track.permalinkURL,
-                        streamURL: streamURL,
+                        streamURL: stream.url,
+                        streamHeaders: stream.headers,
                         durationSeconds: max(0, track.durationMs / 1000),
                         lastFM: MetadataMapper.mapLastFM(track: track)
                     )
@@ -396,6 +406,67 @@ final class AppSessionViewModel: ObservableObject {
         return "SoundCloud login failed: \(error.localizedDescription)"
     }
 
+    private func restoreSavedPlaybackIfPossible() async {
+        guard !didAttemptPlaybackRestore,
+              soundCloudConnected,
+              !soundCloudMockMode,
+              !playerController.hasLoadedQueue,
+              let playbackResolver = activePlaybackResolver,
+              let snapshot = playerController.savedPlaybackSnapshot(),
+              snapshot.queue.indices.contains(snapshot.currentIndex) else {
+            return
+        }
+
+        didAttemptPlaybackRestore = true
+
+        do {
+            var queueItems: [QueueItem] = []
+            queueItems.reserveCapacity(snapshot.queue.count)
+
+            for savedTrack in snapshot.queue {
+                let stream = try await playbackResolver.resolvePlayableStream(for: savedTrack.trackURN)
+                queueItems.append(
+                    QueueItem(
+                        trackURN: savedTrack.trackURN,
+                        title: savedTrack.title,
+                        artistDisplay: savedTrack.artistDisplay,
+                        artworkURL: savedTrack.artworkURL,
+                        permalinkURL: savedTrack.permalinkURL,
+                        streamURL: stream.url,
+                        streamHeaders: stream.headers,
+                        durationSeconds: savedTrack.durationSeconds,
+                        lastFM: savedTrack.lastFM
+                    )
+                )
+            }
+
+            playerController.restoreSavedQueue(queueItems, from: snapshot)
+            statusMessage = "Restored saved queue"
+        } catch {
+            playerController.clearSavedPlaybackSnapshot()
+            statusMessage = "Saved queue could not be restored: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleStatusDismissal(for message: String?) {
+        statusDismissalTask?.cancel()
+        guard let message else {
+            statusDismissalTask = nil
+            return
+        }
+
+        let delay = statusDismissalDelay(for: message)
+        statusDismissalTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, self?.statusMessage == message else { return }
+            self?.statusMessage = nil
+        }
+    }
+
+    private func statusDismissalDelay(for message: String) -> UInt64 {
+        message.isLikelyErrorStatus ? 5_500_000_000 : 2_800_000_000
+    }
+
     private func activateRealMode(isPublicMode: Bool) {
         guard let realSoundCloudAPIClient, let realPlaybackResolver else {
             deactivateSoundCloudMode()
@@ -423,5 +494,17 @@ final class AppSessionViewModel: ObservableObject {
         soundCloudConnected = false
         soundCloudPublicMode = false
         soundCloudMockMode = false
+    }
+}
+
+private extension String {
+    var isLikelyErrorStatus: Bool {
+        let lowered = lowercased()
+        return lowered.contains("error")
+            || lowered.contains("failed")
+            || lowered.contains("missing")
+            || lowered.contains("invalid")
+            || lowered.contains("canceled")
+            || lowered.contains("unavailable")
     }
 }

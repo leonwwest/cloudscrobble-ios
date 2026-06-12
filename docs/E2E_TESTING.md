@@ -89,7 +89,7 @@ One-click helper:
 ```bash
 ./scripts/open_ios_with_env.sh
 ```
-This command syncs `.env` into `CloudScrobbleiOS` scheme env vars and opens the project.
+This command syncs the root `.env` into an untracked local `CloudScrobbleiOS` user scheme and opens the project. Keep `SOUNDCLOUD_CLIENT_SECRET` only in `backend/.env`, never in the root app `.env`.
 
 Alternative (desktop SwiftPM executable):
 - `swift run CloudScrobbleApp`

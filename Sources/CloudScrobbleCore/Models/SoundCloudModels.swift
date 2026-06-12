@@ -91,10 +91,30 @@ public struct SCPlaylist: Codable, Identifiable, Sendable {
 public struct SCStreams: Codable, Sendable {
     public let hlsAac160URL: URL?
     public let hlsAac96URL: URL?
+    public let hlsMP3128URL: URL?
+    public let httpMP3128URL: URL?
+    public let previewMP3128URL: URL?
 
     enum CodingKeys: String, CodingKey {
         case hlsAac160URL = "hls_aac_160_url"
         case hlsAac96URL = "hls_aac_96_url"
+        case hlsMP3128URL = "hls_mp3_128_url"
+        case httpMP3128URL = "http_mp3_128_url"
+        case previewMP3128URL = "preview_mp3_128_url"
+    }
+
+    public init(
+        hlsAac160URL: URL? = nil,
+        hlsAac96URL: URL? = nil,
+        hlsMP3128URL: URL? = nil,
+        httpMP3128URL: URL? = nil,
+        previewMP3128URL: URL? = nil
+    ) {
+        self.hlsAac160URL = hlsAac160URL
+        self.hlsAac96URL = hlsAac96URL
+        self.hlsMP3128URL = hlsMP3128URL
+        self.httpMP3128URL = httpMP3128URL
+        self.previewMP3128URL = previewMP3128URL
     }
 }
 
@@ -115,6 +135,7 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
     public let artworkURL: URL?
     public let permalinkURL: URL?
     public let streamURL: URL
+    public let streamHeaders: [String: String]
     public let durationSeconds: Int
     public let lastFM: LastFMTrackMeta
 
@@ -127,6 +148,7 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
         artworkURL: URL?,
         permalinkURL: URL?,
         streamURL: URL,
+        streamHeaders: [String: String] = [:],
         durationSeconds: Int,
         lastFM: LastFMTrackMeta
     ) {
@@ -136,12 +158,93 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
         self.artworkURL = artworkURL
         self.permalinkURL = permalinkURL
         self.streamURL = streamURL
+        self.streamHeaders = streamHeaders
         self.durationSeconds = durationSeconds
         self.lastFM = lastFM
     }
 }
 
-public struct ScrobbleState: Equatable, Sendable {
+public struct SavedPlaybackTrack: Codable, Equatable, Identifiable, Sendable {
+    public let trackURN: String
+    public let title: String
+    public let artistDisplay: String
+    public let artworkURL: URL?
+    public let permalinkURL: URL?
+    public let durationSeconds: Int
+    public let lastFM: LastFMTrackMeta
+
+    public var id: String { trackURN }
+
+    public init(
+        trackURN: String,
+        title: String,
+        artistDisplay: String,
+        artworkURL: URL?,
+        permalinkURL: URL?,
+        durationSeconds: Int,
+        lastFM: LastFMTrackMeta
+    ) {
+        self.trackURN = trackURN
+        self.title = title
+        self.artistDisplay = artistDisplay
+        self.artworkURL = artworkURL
+        self.permalinkURL = permalinkURL
+        self.durationSeconds = durationSeconds
+        self.lastFM = lastFM
+    }
+
+    public init(queueItem: QueueItem) {
+        self.init(
+            trackURN: queueItem.trackURN,
+            title: queueItem.title,
+            artistDisplay: queueItem.artistDisplay,
+            artworkURL: queueItem.artworkURL,
+            permalinkURL: queueItem.permalinkURL,
+            durationSeconds: queueItem.durationSeconds,
+            lastFM: queueItem.lastFM
+        )
+    }
+}
+
+public struct SavedPlaybackSnapshot: Codable, Equatable, Sendable {
+    public let queue: [SavedPlaybackTrack]
+    public let currentIndex: Int
+    public let elapsedSeconds: TimeInterval
+    public let scrobbleState: ScrobbleState
+    public let repeatModeRawValue: String
+    public let isShuffleEnabled: Bool
+    public let updatedAtUnix: Int
+
+    public init(
+        queue: [SavedPlaybackTrack],
+        currentIndex: Int,
+        elapsedSeconds: TimeInterval,
+        scrobbleState: ScrobbleState,
+        repeatModeRawValue: String,
+        isShuffleEnabled: Bool,
+        updatedAtUnix: Int = Int(Date().timeIntervalSince1970)
+    ) {
+        self.queue = queue
+        self.currentIndex = currentIndex
+        self.elapsedSeconds = elapsedSeconds
+        self.scrobbleState = scrobbleState
+        self.repeatModeRawValue = repeatModeRawValue
+        self.isShuffleEnabled = isShuffleEnabled
+        self.updatedAtUnix = updatedAtUnix
+    }
+}
+
+public struct ResolvedPlaybackStream: Equatable, Sendable {
+    public let url: URL
+    public let headers: [String: String]
+
+    public init(url: URL, headers: [String: String] = [:]) {
+        self.url = url
+        self.headers = headers
+    }
+}
+
+public struct ScrobbleState: Codable, Equatable, Sendable {
     public var didSendNowPlaying = false
     public var didScrobble = false
     public var trackStartedAtUnix: Int?

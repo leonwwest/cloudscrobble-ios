@@ -33,3 +33,4 @@ go run .
 
 ## Client credentials payload
 No payload required (empty JSON body is fine).
+The broker sends `grant_type=client_credentials` to SoundCloud and authenticates the app with HTTP Basic Auth using `SOUNDCLOUD_CLIENT_ID:SOUNDCLOUD_CLIENT_SECRET`.

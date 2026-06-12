@@ -13,6 +13,7 @@
 		6FADA9730E06C31B6030E46B /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592DE3C63ECD225471E2D8B /* LibraryView.swift */; };
 		8B51A62405A2A6E69D2CDACE /* SystemBrowserClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */; };
 		8FC9CC9238F2497759F78F97 /* CloudScrobbleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8A1DF5D797BE565A7EBBB2DB /* CloudScrobbleCore */; };
+		9D90A5290CA941B7A3680F54 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B7D58FB6EFA042D0853776B7 /* Assets.xcassets */; };
 		A14FD17852DD568885D94287 /* CloudScrobbleApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1254B5DAE487E6A56217C1F /* CloudScrobbleApplication.swift */; };
 		ABCF9277938E5E472C8E50E1 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1163495C1B831CFB2412ED /* DesignSystem.swift */; };
 		BCB1BB4BF8FEFD8D347000F9 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5618EE12101A75D1DB95E9F /* SearchView.swift */; };
@@ -27,6 +28,7 @@
 		7FBFAE71534475A1934D4817 /* CloudScrobble */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudScrobble; path = ..; sourceTree = SOURCE_ROOT; };
 		8C6076FD6F46BF4FD6068665 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		B7D58FB6EFA042D0853776B7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = CloudScrobbleiOS/Assets.xcassets; sourceTree = "<group>"; };
 		BA6C1182BCC2DD3BF42B8DF3 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		BF1163495C1B831CFB2412ED /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		D873D7E28C58F9186F3E9D67 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
@@ -70,6 +72,7 @@
 			isa = PBXGroup;
 			children = (
 				722A4C25D8DEE6C899A26E33 /* CloudScrobble */,
+				B7D58FB6EFA042D0853776B7 /* Assets.xcassets */,
 				10B5DBCA016C3A08AFE1D848 /* Packages */,
 				AF2928F9069D5203EEAC98AF /* Products */,
 			);
@@ -150,6 +153,7 @@
 			buildPhases = (
 				35952CA58081D940986C31FA /* Sources */,
 				94FF892072843E0F61149EC4 /* Frameworks */,
+				C658BEF00FC5406BB34DC3E1 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -193,6 +197,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C658BEF00FC5406BB34DC3E1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D90A5290CA941B7A3680F54 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		35952CA58081D940986C31FA /* Sources */ = {
@@ -282,7 +297,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = X5PHH4UVL5;
 				INFOPLIST_FILE = CloudScrobbleiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = CloudScrobble;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -303,7 +320,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = X5PHH4UVL5;
 				INFOPLIST_FILE = CloudScrobbleiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = CloudScrobble;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

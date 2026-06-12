@@ -105,6 +105,11 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
         try await get(path: "/tracks/\(trackURN)/streams")
     }
 
+    public func streamRequestHeaders() async throws -> [String: String] {
+        let token = try await tokenProvider.validAccessToken()
+        return ["Authorization": "\(config.authScheme) \(token)"]
+    }
+
     public func legacyStreamURL(trackURN: String) async throws -> URL {
         var request = try await makeRequest(path: "/tracks/\(trackURN)/stream")
         request.httpMethod = "GET"

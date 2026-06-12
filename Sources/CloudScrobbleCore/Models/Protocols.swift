@@ -30,11 +30,12 @@ public protocol SoundCloudAPIClienting: Sendable {
     func playlistTracks(urn: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func track(urn: String) async throws -> SCTrack
     func streams(trackURN: String) async throws -> SCStreams
+    func streamRequestHeaders() async throws -> [String: String]
     func legacyStreamURL(trackURN: String) async throws -> URL
 }
 
 public protocol PlaybackResolving: Sendable {
-    func resolvePlayableURL(for trackURN: String) async throws -> URL
+    func resolvePlayableStream(for trackURN: String) async throws -> ResolvedPlaybackStream
 }
 
 public protocol LastFMAuthenticating: Sendable {

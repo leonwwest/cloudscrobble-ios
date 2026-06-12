@@ -15,7 +15,7 @@ cd "$ROOT_DIR"
 echo "==> Token broker mock E2E"
 cat > /tmp/mock_soundcloud_token.py <<'PY'
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import json, urllib.parse
+import base64, json, urllib.parse
 
 class H(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -47,6 +47,15 @@ class H(BaseHTTPRequestHandler):
                 'expires_in': 3600,
             }
         elif grant == 'client_credentials':
+            auth = self.headers.get('Authorization', '')
+            expected = 'Basic ' + base64.b64encode(b'fake_client:fake_secret').decode('ascii')
+            if auth != expected or params.get('client_id') or params.get('client_secret'):
+                self.send_response(401)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error':'invalid_client_credentials_auth'}).encode())
+                return
+
             payload = {
                 'access_token': 'mock_public_access_token',
                 'token_type': 'bearer',
@@ -77,6 +86,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+wait_for_http() {
+  local url="$1"
+  local attempts="${2:-30}"
+
+  for _ in $(seq 1 "$attempts"); do
+    if curl -sf "$url" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for $url" >&2
+  return 1
+}
+
 python3 /tmp/mock_soundcloud_token.py >/tmp/mock_soundcloud_token.log 2>&1 &
 MOCK_PID=$!
 
@@ -85,7 +109,7 @@ ADDR=:8791 SOUNDCLOUD_CLIENT_ID=fake_client SOUNDCLOUD_CLIENT_SECRET=fake_secret
 BROKER_PID=$!
 cd "$ROOT_DIR"
 
-sleep 2
+wait_for_http http://127.0.0.1:8791/healthz 30
 
 HEALTH="$(curl -sf http://127.0.0.1:8791/healthz)"
 EXCHANGE="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/exchange -H 'Content-Type: application/json' -d '{"code":"auth_code","codeVerifier":"pkce_verifier","redirectUri":"cloudscrobble://oauth"}')"

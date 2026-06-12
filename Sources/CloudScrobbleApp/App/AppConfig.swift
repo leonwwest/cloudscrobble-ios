@@ -5,57 +5,60 @@ struct AppConfig {
     let soundCloudClientID: String
     let soundCloudRedirectURI: String
     let tokenBrokerBaseURL: URL
-    let lastFMAPIKey: String
-    let lastFMAPISecret: String
 
-    static let requiredEnvironmentKeys = [
+    static let requiredConfigurationKeys = [
         "SOUNDCLOUD_CLIENT_ID",
         "SOUNDCLOUD_REDIRECT_URI",
-        "SOUNDCLOUD_TOKEN_BROKER_BASE_URL",
-        "LASTFM_API_KEY",
-        "LASTFM_API_SECRET"
+        "SOUNDCLOUD_TOKEN_BROKER_BASE_URL"
     ]
 
-    static func loadFromEnvironment() -> AppConfig? {
-        let env = ProcessInfo.processInfo.environment
+    static func load() -> AppConfig? {
+        loadFromEnvironment() ?? loadFromBundleInfo()
+    }
 
-        guard let rawSoundCloudClientID = env["SOUNDCLOUD_CLIENT_ID"],
-              let rawRedirectURI = env["SOUNDCLOUD_REDIRECT_URI"],
-              let rawTokenBroker = env["SOUNDCLOUD_TOKEN_BROKER_BASE_URL"],
-              let rawLastFMAPIKey = env["LASTFM_API_KEY"],
-              let rawLastFMAPISecret = env["LASTFM_API_SECRET"] else {
+    static func loadFromEnvironment() -> AppConfig? {
+        makeConfig(from: ProcessInfo.processInfo.environment)
+    }
+
+    static func loadFromBundleInfo() -> AppConfig? {
+        makeConfig(from: Bundle.main.infoDictionary ?? [:])
+    }
+
+    private static func makeConfig(from values: [String: Any]) -> AppConfig? {
+        guard let rawSoundCloudClientID = stringValue(for: "SOUNDCLOUD_CLIENT_ID", in: values),
+              let rawRedirectURI = stringValue(for: "SOUNDCLOUD_REDIRECT_URI", in: values),
+              let rawTokenBroker = stringValue(for: "SOUNDCLOUD_TOKEN_BROKER_BASE_URL", in: values) else {
             return nil
         }
 
-        let soundCloudClientID = rawSoundCloudClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let redirectURI = rawRedirectURI.trimmingCharacters(in: .whitespacesAndNewlines)
-        let tokenBrokerRaw = rawTokenBroker.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastFMAPIKey = rawLastFMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastFMAPISecret = rawLastFMAPISecret.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !soundCloudClientID.isEmpty,
-              !redirectURI.isEmpty,
-              !tokenBrokerRaw.isEmpty,
-              !lastFMAPIKey.isEmpty,
-              !lastFMAPISecret.isEmpty,
-              let tokenBrokerBaseURL = URL(string: tokenBrokerRaw) else {
+        guard let tokenBrokerBaseURL = URL(string: rawTokenBroker) else {
             return nil
         }
 
         return AppConfig(
-            soundCloudClientID: soundCloudClientID,
-            soundCloudRedirectURI: redirectURI,
-            tokenBrokerBaseURL: tokenBrokerBaseURL,
-            lastFMAPIKey: lastFMAPIKey,
-            lastFMAPISecret: lastFMAPISecret
+            soundCloudClientID: rawSoundCloudClientID,
+            soundCloudRedirectURI: rawRedirectURI,
+            tokenBrokerBaseURL: tokenBrokerBaseURL
         )
     }
 
-    static func missingEnvironmentKeys() -> [String] {
+    private static func stringValue(for key: String, in values: [String: Any]) -> String? {
+        guard let rawValue = values[key] as? String else {
+            return nil
+        }
+
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !value.hasPrefix("$(") else {
+            return nil
+        }
+        return value
+    }
+
+    static func missingConfigurationKeys() -> [String] {
         let env = ProcessInfo.processInfo.environment
-        return requiredEnvironmentKeys.filter { key in
-            guard let value = env[key] else { return true }
-            return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let info = Bundle.main.infoDictionary ?? [:]
+        return requiredConfigurationKeys.filter { key in
+            stringValue(for: key, in: env) == nil && stringValue(for: key, in: info) == nil
         }
     }
 }

@@ -7,15 +7,24 @@ public actor PlaybackResolver: PlaybackResolving {
         self.api = api
     }
 
-    public func resolvePlayableURL(for trackURN: String) async throws -> URL {
+    public func resolvePlayableStream(for trackURN: String) async throws -> ResolvedPlaybackStream {
         let streams = try await api.streams(trackURN: trackURN)
+        let headers = try await api.streamRequestHeaders()
 
         if let url = streams.hlsAac160URL {
-            return url
+            return ResolvedPlaybackStream(url: url, headers: headers)
         }
 
         if let url = streams.hlsAac96URL {
-            return url
+            return ResolvedPlaybackStream(url: url, headers: headers)
+        }
+
+        if let url = streams.hlsMP3128URL {
+            return ResolvedPlaybackStream(url: url, headers: headers)
+        }
+
+        if let url = streams.httpMP3128URL {
+            return ResolvedPlaybackStream(url: url, headers: headers)
         }
 
         // Fallback for endpoint drift between /streams and legacy /stream.
@@ -24,6 +33,6 @@ public actor PlaybackResolver: PlaybackResolving {
             throw CloudScrobbleError.unsupportedStream
         }
 
-        return fallbackURL
+        return ResolvedPlaybackStream(url: fallbackURL, headers: headers)
     }
 }

@@ -115,10 +115,8 @@ func newMux(cfg config) *http.ServeMux {
 
 		payload := url.Values{}
 		payload.Set("grant_type", "client_credentials")
-		payload.Set("client_id", cfg.SoundCloudClientID)
-		payload.Set("client_secret", cfg.SoundCloudSecret)
 
-		proxyTokenRequest(w, cfg, payload)
+		proxyTokenRequest(w, cfg, payload, withBasicAuth(cfg.SoundCloudClientID, cfg.SoundCloudSecret))
 	}))
 
 	return mux
@@ -148,7 +146,15 @@ func loadConfig() (config, error) {
 	return cfg, nil
 }
 
-func proxyTokenRequest(w http.ResponseWriter, cfg config, payload url.Values) {
+type tokenRequestOption func(*http.Request)
+
+func withBasicAuth(clientID, secret string) tokenRequestOption {
+	return func(req *http.Request) {
+		req.SetBasicAuth(clientID, secret)
+	}
+}
+
+func proxyTokenRequest(w http.ResponseWriter, cfg config, payload url.Values, opts ...tokenRequestOption) {
 	req, err := http.NewRequest(http.MethodPost, cfg.SoundCloudTokenURL, strings.NewReader(payload.Encode()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "request_build_failed"})
@@ -157,6 +163,9 @@ func proxyTokenRequest(w http.ResponseWriter, cfg config, payload url.Values) {
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	for _, opt := range opts {
+		opt(req)
+	}
 
 	client := &http.Client{Timeout: cfg.RequestTimeout}
 	res, err := client.Do(req)

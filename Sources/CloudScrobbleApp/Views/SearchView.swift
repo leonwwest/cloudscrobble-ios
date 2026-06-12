@@ -9,26 +9,19 @@ struct SearchView: View {
             VStack(alignment: .leading, spacing: 12) {
                 controlCard
 
-                if viewModel.isLoading {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .tint(CloudTheme.sky)
-                        Text("Searching…")
-                            .font(.system(.subheadline, design: .serif))
-                            .foregroundStyle(CloudTheme.muted)
-                    }
-                    .padding(.horizontal, 8)
-                }
-
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.warning)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(CloudTheme.warning.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(CloudTheme.warning.opacity(0.24), lineWidth: 1)
                         )
                 }
 
@@ -38,6 +31,15 @@ struct SearchView: View {
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 84)
+        }
+        .onChange(of: viewModel.query) { _, _ in
+            viewModel.scheduleSearch()
+        }
+        .onChange(of: viewModel.scope) { _, _ in
+            viewModel.scheduleSearch(immediate: true)
+        }
         .sheet(item: Binding(
             get: {
                 viewModel.selectedUserProfile.map { profile in
@@ -64,33 +66,61 @@ struct SearchView: View {
                     Task { await viewModel.playSelectedPlaylist() }
                 },
                 onPlayTrack: { track in
-                    Task { await viewModel.play(track: track) }
+                    Task { await viewModel.playSelectedPlaylist(startingWith: track) }
                 }
             )
         }
     }
 
     private var controlCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Search SoundCloud")
-                .font(.system(.headline, design: .serif).weight(.bold))
-                .foregroundStyle(CloudTheme.ink)
-
-            TextField("Tracks, playlists, users", text: $viewModel.query)
-                .cloudCredentialField()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.92))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(CloudTheme.sky.opacity(0.35), lineWidth: 1)
-                )
-                .onSubmit {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform")
+                    .foregroundStyle(CloudTheme.sky)
+                Text("Search")
+                    .font(.system(.title3, design: .rounded).weight(.black))
+                    .foregroundStyle(CloudTheme.ink)
+                Spacer()
+                Button {
                     Task { await viewModel.runSearch(reset: true) }
+                } label: {
+                    Image(systemName: "arrow.forward")
                 }
+                .buttonStyle(IconCircleButtonStyle())
+            }
+
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(CloudTheme.muted)
+                TextField("Tracks, playlists, users", text: $viewModel.query)
+                    .cloudCredentialField()
+                    .foregroundStyle(CloudTheme.ink)
+                    .onSubmit {
+                        Task { await viewModel.runSearch(reset: true) }
+                    }
+
+                if !viewModel.query.isEmpty {
+                    Button {
+                        viewModel.query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(CloudTheme.elevatedStrong)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(CloudTheme.line, lineWidth: 1)
+            )
 
             Picker("Scope", selection: $viewModel.scope) {
                 ForEach(SearchViewModel.Scope.allCases) { scope in
@@ -98,11 +128,6 @@ struct SearchView: View {
                 }
             }
             .pickerStyle(.segmented)
-
-            Button("Run Search") {
-                Task { await viewModel.runSearch(reset: true) }
-            }
-            .buttonStyle(PrimaryPillButtonStyle())
         }
         .cloudCard()
     }
@@ -111,7 +136,9 @@ struct SearchView: View {
     private var content: some View {
         switch viewModel.scope {
         case .tracks:
-            if viewModel.tracks.isEmpty {
+            if viewModel.isLoading && viewModel.tracks.isEmpty {
+                LoadingResultSkeletonList()
+            } else if viewModel.tracks.isEmpty {
                 EmptyStateCard(
                     icon: "waveform.badge.magnifyingglass",
                     title: "No tracks yet",
@@ -130,7 +157,9 @@ struct SearchView: View {
                 }
             }
         case .playlists:
-            if viewModel.playlists.isEmpty {
+            if viewModel.isLoading && viewModel.playlists.isEmpty {
+                LoadingResultSkeletonList(showsArtwork: false)
+            } else if viewModel.playlists.isEmpty {
                 EmptyStateCard(
                     icon: "music.note.list",
                     title: "No playlists yet",
@@ -149,7 +178,9 @@ struct SearchView: View {
                 }
             }
         case .users:
-            if viewModel.users.isEmpty {
+            if viewModel.isLoading && viewModel.users.isEmpty {
+                LoadingResultSkeletonList()
+            } else if viewModel.users.isEmpty {
                 EmptyStateCard(
                     icon: "person.2.crop.square.stack",
                     title: "No users yet",
@@ -184,21 +215,21 @@ private struct TrackResultCard: View {
                         .resizable()
                         .scaledToFill()
                 default:
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(CloudTheme.sky.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(CloudTheme.elevatedStrong)
                         .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
                 }
             }
             .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(track.title)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                 Text(track.user.username)
-                    .font(.system(.caption, design: .serif))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             }
 
@@ -216,12 +247,12 @@ private struct TrackResultCard: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.95))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
         )
     }
 }
@@ -237,36 +268,38 @@ private struct PlaylistResultCard: View {
                 .foregroundStyle(CloudTheme.sky)
                 .frame(width: 42, height: 42)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(CloudTheme.sky.opacity(0.15))
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(playlist.title)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                 Text(playlist.user.username)
-                    .font(.system(.caption, design: .serif))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             }
 
             Spacer()
 
             if let onOpen {
-                Button("Open", action: onOpen)
+                Button(action: onOpen) {
+                    Label("Open", systemImage: "chevron.right")
+                }
                     .buttonStyle(SecondaryPillButtonStyle())
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.95))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
         )
     }
 }
@@ -283,7 +316,7 @@ private struct UserResultCard: View {
                     image.resizable().scaledToFill()
                 default:
                     Circle()
-                        .fill(CloudTheme.sky.opacity(0.2))
+                        .fill(CloudTheme.elevatedStrong)
                         .overlay(Image(systemName: "person.fill").foregroundStyle(CloudTheme.sky))
                 }
             }
@@ -291,23 +324,25 @@ private struct UserResultCard: View {
             .clipShape(Circle())
 
             Text(user.username)
-                .font(.system(.subheadline, design: .serif).weight(.semibold))
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
                 .foregroundStyle(CloudTheme.ink)
 
             Spacer()
 
-            Button("Profile", action: onOpen)
+            Button(action: onOpen) {
+                Label("Profile", systemImage: "person.crop.circle")
+            }
                 .buttonStyle(SecondaryPillButtonStyle())
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.95))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(CloudTheme.sky.opacity(0.20), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
         )
     }
 }
@@ -326,15 +361,17 @@ private struct UserProfileSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(profile.user.username)
-                        .font(.system(.title2, design: .serif).weight(.bold))
+                        .font(.system(.title2, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
                     Text("Public Profile")
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                 }
                 .cloudCard()
 
                 Text("Tracks")
-                    .font(.system(.headline, design: .serif).weight(.bold))
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
                 ForEach(profile.tracks.prefix(20)) { track in
                     TrackResultCard(track: track) {
                         onPlayTrack(track)
@@ -342,13 +379,16 @@ private struct UserProfileSheet: View {
                 }
 
                 Text("Playlists")
-                    .font(.system(.headline, design: .serif).weight(.bold))
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
                 ForEach(profile.playlists.prefix(20)) { playlist in
                     PlaylistResultCard(playlist: playlist, onOpen: nil)
                 }
             }
             .padding()
         }
+        .background(CloudBackdrop())
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -362,9 +402,12 @@ private struct PlaylistTracksSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Playlist Tracks")
-                        .font(.system(.title3, design: .serif).weight(.bold))
+                        .font(.system(.title3, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
                     Spacer()
-                    Button("Play All", action: onPlayAll)
+                    Button(action: onPlayAll) {
+                        Label("Play All", systemImage: "play.fill")
+                    }
                         .buttonStyle(PrimaryPillButtonStyle())
                         .frame(maxWidth: 160)
                 }
@@ -378,5 +421,7 @@ private struct PlaylistTracksSheet: View {
             }
             .padding()
         }
+        .background(CloudBackdrop())
+        .preferredColorScheme(.dark)
     }
 }

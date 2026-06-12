@@ -3,7 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${1:-$ROOT_DIR/.env}"
-SCHEME_FILE="${2:-$ROOT_DIR/ios/CloudScrobbleiOS.xcodeproj/xcshareddata/xcschemes/CloudScrobbleiOS.xcscheme}"
+PROJECT_DIR="$ROOT_DIR/ios/CloudScrobbleiOS.xcodeproj"
+SHARED_SCHEME_FILE="$PROJECT_DIR/xcshareddata/xcschemes/CloudScrobbleiOS.xcscheme"
+USER_SCHEME_DIR="$PROJECT_DIR/xcuserdata/${USER:-local}.xcuserdatad/xcschemes"
+SCHEME_FILE="${2:-$USER_SCHEME_DIR/CloudScrobbleiOS.xcscheme}"
 
 if pgrep -x "Xcode" >/dev/null 2>&1; then
   echo "Xcode is running. Please close Xcode before syncing env vars, otherwise scheme changes may be overwritten." >&2
@@ -16,8 +19,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 if [[ ! -f "$SCHEME_FILE" ]]; then
-  echo "Missing scheme file: $SCHEME_FILE" >&2
-  exit 1
+  if [[ ! -f "$SHARED_SCHEME_FILE" ]]; then
+    echo "Missing shared scheme template: $SHARED_SCHEME_FILE" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$SCHEME_FILE")"
+  cp "$SHARED_SCHEME_FILE" "$SCHEME_FILE"
 fi
 
 python3 - "$ENV_FILE" "$SCHEME_FILE" <<'PY'
@@ -27,6 +34,13 @@ import sys
 import xml.etree.ElementTree as ET
 
 env_path, scheme_path = sys.argv[1], sys.argv[2]
+allowed_keys = {
+    "SOUNDCLOUD_CLIENT_ID",
+    "SOUNDCLOUD_REDIRECT_URI",
+    "SOUNDCLOUD_TOKEN_BROKER_BASE_URL",
+    "LASTFM_API_KEY",
+    "LASTFM_API_SECRET",
+}
 
 parsed = {}
 with open(env_path, "r", encoding="utf-8") as fh:
@@ -51,10 +65,11 @@ with open(env_path, "r", encoding="utf-8") as fh:
         if len(value) >= 2 and ((value[0] == '"' and value[-1] == '"') or (value[0] == "'" and value[-1] == "'")):
             value = value[1:-1]
 
-        parsed[key] = value
+        if key in allowed_keys:
+            parsed[key] = value
 
 if not parsed:
-    raise SystemExit(f"No valid key=value pairs found in {env_path}")
+    raise SystemExit(f"No valid app key=value pairs found in {env_path}")
 
 tree = ET.parse(scheme_path)
 root = tree.getroot()
@@ -73,5 +88,5 @@ for key in sorted(parsed.keys()):
     ET.SubElement(env_vars, "EnvironmentVariable", key=key, value=parsed[key], isEnabled="YES")
 
 tree.write(scheme_path, encoding="UTF-8", xml_declaration=True)
-print(f"Synced {len(parsed)} vars from {env_path} -> {scheme_path}")
+print(f"Synced {len(parsed)} app vars from {env_path} -> {scheme_path}")
 PY

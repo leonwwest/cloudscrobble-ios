@@ -37,6 +37,27 @@ final class ScrobbleEngineTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
+    func testRestoreContinuesListeningProgress() {
+        let track = makeQueueItem(duration: 300)
+        let engine = ScrobbleEngine()
+        _ = engine.start(track: track, startedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        var restoredState = engine.state
+        restoredState.listenedSeconds = 149
+
+        let restoredEngine = ScrobbleEngine()
+        restoredEngine.restore(track: track, state: restoredState, playbackTime: 149, isPaused: false)
+
+        let events = restoredEngine.tick(playbackTime: 151)
+
+        XCTAssertTrue(events.contains(where: {
+            if case .sendScrobble(_, let timestamp) = $0 {
+                return timestamp == 1_700_000_000
+            }
+            return false
+        }))
+    }
+
     private func makeQueueItem(duration: Int) -> QueueItem {
         QueueItem(
             trackURN: "soundcloud:tracks:1",

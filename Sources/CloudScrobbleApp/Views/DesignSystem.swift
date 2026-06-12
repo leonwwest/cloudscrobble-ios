@@ -1,64 +1,57 @@
 import SwiftUI
 
 enum CloudTheme {
-    static let night = Color(red: 0.03, green: 0.07, blue: 0.13)
-    static let dusk = Color(red: 0.11, green: 0.20, blue: 0.33)
-    static let sky = Color(red: 0.12, green: 0.67, blue: 0.88)
-    static let seafoam = Color(red: 0.33, green: 0.84, blue: 0.64)
-    static let shell = Color(red: 0.96, green: 0.97, blue: 0.99)
-    static let ink = Color(red: 0.08, green: 0.11, blue: 0.19)
-    static let muted = Color(red: 0.35, green: 0.42, blue: 0.50)
-    static let success = Color(red: 0.08, green: 0.68, blue: 0.47)
-    static let warning = Color(red: 0.90, green: 0.33, blue: 0.23)
+    static let night = Color(red: 0.02, green: 0.02, blue: 0.03)
+    static let dusk = Color(red: 0.08, green: 0.09, blue: 0.11)
+    static let sky = Color(red: 1.00, green: 0.34, blue: 0.06)
+    static let seafoam = Color(red: 0.12, green: 0.78, blue: 0.68)
+    static let shell = Color(red: 0.10, green: 0.11, blue: 0.13)
+    static let ink = Color(red: 0.95, green: 0.96, blue: 0.98)
+    static let muted = Color(red: 0.61, green: 0.64, blue: 0.70)
+    static let success = Color(red: 0.12, green: 0.78, blue: 0.50)
+    static let warning = Color(red: 1.00, green: 0.64, blue: 0.25)
 
-    static let violet = Color(red: 0.33, green: 0.34, blue: 0.79)
-    static let amber = Color(red: 0.98, green: 0.71, blue: 0.22)
+    static let violet = Color(red: 0.33, green: 0.52, blue: 0.96)
+    static let amber = Color(red: 1.00, green: 0.76, blue: 0.25)
+    static let line = Color.white.opacity(0.10)
+    static let elevated = Color.white.opacity(0.075)
+    static let elevatedStrong = Color.white.opacity(0.13)
 }
 
 struct CloudBackdrop: View {
     var body: some View {
         ZStack {
-            AngularGradient(
-                colors: [CloudTheme.night, CloudTheme.violet, CloudTheme.dusk, CloudTheme.night],
-                center: .topLeading
+            LinearGradient(
+                colors: [
+                    CloudTheme.night,
+                    Color(red: 0.06, green: 0.04, blue: 0.035),
+                    CloudTheme.dusk,
+                    CloudTheme.night
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .overlay(
-                LinearGradient(
-                    colors: [Color.clear, CloudTheme.night.opacity(0.72)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+
+            LinearGradient(
+                colors: [
+                    CloudTheme.sky.opacity(0.22),
+                    Color.clear,
+                    CloudTheme.seafoam.opacity(0.10)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
 
-            Circle()
-                .fill(CloudTheme.sky.opacity(0.35))
-                .frame(width: 350, height: 350)
-                .blur(radius: 56)
-                .offset(x: 170, y: -260)
-
-            Circle()
-                .fill(CloudTheme.amber.opacity(0.16))
-                .frame(width: 260, height: 260)
-                .blur(radius: 48)
-                .offset(x: -140, y: -110)
-
-            Circle()
-                .fill(CloudTheme.seafoam.opacity(0.22))
-                .frame(width: 320, height: 320)
-                .blur(radius: 44)
-                .offset(x: -140, y: 250)
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.06), Color.clear, Color.white.opacity(0.04)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .blendMode(.softLight)
-                .rotationEffect(.degrees(-8))
-                .scaleEffect(1.45)
+            VStack(spacing: 18) {
+                ForEach(0..<9, id: \.self) { index in
+                    Rectangle()
+                        .fill(Color.white.opacity(index.isMultiple(of: 3) ? 0.045 : 0.024))
+                        .frame(height: 1)
+                }
+            }
+            .rotationEffect(.degrees(-8))
+            .scaleEffect(1.4)
+            .blendMode(.screen)
         }
         .ignoresSafeArea()
     }
@@ -67,29 +60,16 @@ struct CloudBackdrop: View {
 struct CloudCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(18)
+            .padding(13)
             .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [CloudTheme.shell.opacity(0.97), Color.white.opacity(0.88)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(CloudTheme.elevated)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.92), CloudTheme.sky.opacity(0.18)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.2
-                )
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(CloudTheme.line, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.18), radius: 24, x: 0, y: 12)
-            .shadow(color: CloudTheme.sky.opacity(0.08), radius: 10, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 12)
     }
 }
 
@@ -121,55 +101,67 @@ extension View {
 struct PrimaryPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.body, design: .serif).weight(.bold))
+            .font(.system(.subheadline, design: .rounded).weight(.bold))
             .foregroundStyle(.white)
-            .padding(.vertical, 13)
-            .padding(.horizontal, 18)
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
             .background(
                 Capsule(style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [CloudTheme.sky, CloudTheme.violet, CloudTheme.seafoam],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(CloudTheme.sky.opacity(configuration.isPressed ? 0.78 : 1))
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.20), lineWidth: 1)
             )
-            .shadow(color: CloudTheme.sky.opacity(0.38), radius: 12, x: 0, y: 7)
+            .shadow(color: CloudTheme.sky.opacity(configuration.isPressed ? 0.10 : 0.30), radius: 14, x: 0, y: 8)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
 struct SecondaryPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.body, design: .serif).weight(.semibold))
+            .font(.system(.subheadline, design: .rounded).weight(.semibold))
             .foregroundStyle(CloudTheme.ink)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.74 : 0.92))
+                    .fill(configuration.isPressed ? CloudTheme.elevatedStrong : CloudTheme.elevated)
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [CloudTheme.sky.opacity(0.45), CloudTheme.seafoam.opacity(0.3)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        lineWidth: 1
-                    )
+                    .stroke(CloudTheme.line, lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+struct IconCircleButtonStyle: ButtonStyle {
+    var isPrimary = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: isPrimary ? 19 : 16, weight: .bold, design: .rounded))
+            .foregroundStyle(isPrimary ? .white : CloudTheme.ink)
+            .frame(width: isPrimary ? 58 : 42, height: isPrimary ? 58 : 42)
+            .background(
+                Circle()
+                    .fill(isPrimary ? CloudTheme.sky : CloudTheme.elevated)
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(isPrimary ? 0.20 : 0.12), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }
 
@@ -178,25 +170,28 @@ struct StatusBadge: View {
     let isConnected: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Circle()
                 .fill(isConnected ? CloudTheme.success : CloudTheme.warning)
-                .frame(width: 9, height: 9)
+                .frame(width: 7, height: 7)
             Text(title)
-                .font(.system(.caption, design: .serif).weight(.bold))
-            Text(isConnected ? "Connected" : "Offline")
-                .font(.system(.caption, design: .serif))
+                .font(.system(.caption2, design: .rounded).weight(.bold))
+                .lineLimit(1)
+            Text(isConnected ? "On" : "Off")
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.muted)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .foregroundStyle(CloudTheme.ink)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.95))
+                .fill(CloudTheme.elevated)
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.75), lineWidth: 1)
+                .stroke(CloudTheme.line, lineWidth: 1)
         )
     }
 }
@@ -207,20 +202,83 @@ struct EmptyStateCard: View {
     let subtitle: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(size: 25, weight: .semibold))
                 .foregroundStyle(CloudTheme.sky)
+                .frame(width: 50, height: 50)
+                .background(Circle().fill(CloudTheme.sky.opacity(0.14)))
             Text(title)
-                .font(.system(.headline, design: .serif).weight(.bold))
+                .font(.system(.headline, design: .rounded).weight(.bold))
                 .foregroundStyle(CloudTheme.ink)
             Text(subtitle)
                 .multilineTextAlignment(.center)
-                .font(.system(.subheadline, design: .serif))
+                .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(CloudTheme.muted)
+                .lineSpacing(2)
         }
         .frame(maxWidth: .infinity)
-        .padding(24)
+        .padding(22)
         .cloudCard()
+    }
+}
+
+struct LoadingResultSkeleton: View {
+    var showsArtwork = true
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if showsArtwork {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(CloudTheme.elevatedStrong)
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(CloudTheme.line, lineWidth: 1)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(CloudTheme.elevatedStrong)
+                    .frame(height: 14)
+                    .frame(maxWidth: 210)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(CloudTheme.elevatedStrong.opacity(0.75))
+                    .frame(height: 10)
+                    .frame(maxWidth: 135)
+            }
+
+            Spacer()
+
+            Circle()
+                .fill(CloudTheme.elevatedStrong)
+                .frame(width: 36, height: 36)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
+        )
+        .redacted(reason: .placeholder)
+    }
+}
+
+struct LoadingResultSkeletonList: View {
+    var count = 5
+    var showsArtwork = true
+
+    var body: some View {
+        LazyVStack(spacing: 10) {
+            ForEach(0..<count, id: \.self) { _ in
+                LoadingResultSkeleton(showsArtwork: showsArtwork)
+            }
+        }
     }
 }

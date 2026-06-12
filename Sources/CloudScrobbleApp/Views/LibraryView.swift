@@ -10,25 +10,18 @@ struct LibraryView: View {
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.warning)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(CloudTheme.warning.opacity(0.1))
                         )
-                }
-
-                if viewModel.isLoading {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(CloudTheme.sky)
-                        Text("Refreshing library…")
-                            .font(.system(.subheadline, design: .serif))
-                            .foregroundStyle(CloudTheme.muted)
-                    }
-                    .padding(.horizontal, 6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(CloudTheme.warning.opacity(0.24), lineWidth: 1)
+                        )
                 }
 
                 librarySections
@@ -37,6 +30,9 @@ struct LibraryView: View {
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 84)
+        }
         .task {
             await viewModel.refresh()
         }
@@ -46,19 +42,21 @@ struct LibraryView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("My SoundCloud")
-                    .font(.system(.headline, design: .serif).weight(.bold))
+                    .font(.system(.title3, design: .rounded).weight(.black))
                     .foregroundStyle(CloudTheme.ink)
                 Text(viewModel.me.map { "Signed in as \($0.username)" } ?? "Connect SoundCloud to load private data")
-                    .font(.system(.caption, design: .serif))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             }
 
             Spacer()
 
-            Button("Refresh") {
+            Button {
                 Task { await viewModel.refresh() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(SecondaryPillButtonStyle())
+            .buttonStyle(IconCircleButtonStyle())
         }
         .cloudCard()
     }
@@ -76,9 +74,11 @@ struct LibraryView: View {
                 title: "Playlists",
                 icon: "music.note.list"
             ) {
-                if viewModel.myPlaylists.isEmpty {
+                if viewModel.isLoading && viewModel.myPlaylists.isEmpty {
+                    LoadingResultSkeletonList(count: 2, showsArtwork: false)
+                } else if viewModel.myPlaylists.isEmpty {
                     Text("No playlists")
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                 } else {
                     ForEach(viewModel.myPlaylists) { playlist in
@@ -91,13 +91,15 @@ struct LibraryView: View {
                 title: "Liked Tracks",
                 icon: "heart.fill"
             ) {
-                if viewModel.myLikedTracks.isEmpty {
+                if viewModel.isLoading && viewModel.myLikedTracks.isEmpty {
+                    LoadingResultSkeletonList(count: 3)
+                } else if viewModel.myLikedTracks.isEmpty {
                     Text("No liked tracks")
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                 } else {
                     ForEach(viewModel.myLikedTracks) { track in
-                        row(title: track.title, subtitle: track.user.username, actionLabel: "Play") {
+                        row(title: track.title, subtitle: track.user.username, actionLabel: "Play", actionIcon: "play.fill") {
                             Task { await viewModel.play(track: track) }
                         }
                     }
@@ -108,9 +110,11 @@ struct LibraryView: View {
                 title: "Liked Playlists",
                 icon: "star.fill"
             ) {
-                if viewModel.myLikedPlaylists.isEmpty {
+                if viewModel.isLoading && viewModel.myLikedPlaylists.isEmpty {
+                    LoadingResultSkeletonList(count: 2, showsArtwork: false)
+                } else if viewModel.myLikedPlaylists.isEmpty {
                     Text("No liked playlists")
-                        .font(.system(.caption, design: .serif))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                 } else {
                     ForEach(viewModel.myLikedPlaylists) { playlist in
@@ -125,29 +129,43 @@ struct LibraryView: View {
         title: String,
         subtitle: String,
         actionLabel: String?,
+        actionIcon: String? = nil,
         action: (() -> Void)?
     ) -> some View {
         HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(CloudTheme.elevatedStrong)
+                .frame(width: 4)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                 Text(subtitle)
-                    .font(.system(.caption, design: .serif))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             }
 
             Spacer()
 
             if let actionLabel, let action {
-                Button(actionLabel, action: action)
+                Button(action: action) {
+                    if let actionIcon {
+                        Label(actionLabel, systemImage: actionIcon)
+                    } else {
+                        Text(actionLabel)
+                    }
+                }
                     .buttonStyle(SecondaryPillButtonStyle())
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .overlay(
-            Divider().offset(y: 18),
+            Rectangle()
+                .fill(CloudTheme.line)
+                .frame(height: 1)
+                .offset(y: 20),
             alignment: .bottom
         )
     }
@@ -164,7 +182,7 @@ private struct LibrarySectionCard<Content: View>: View {
                 Image(systemName: icon)
                     .foregroundStyle(CloudTheme.sky)
                 Text(title)
-                    .font(.system(.headline, design: .serif).weight(.bold))
+                    .font(.system(.headline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
             }
 

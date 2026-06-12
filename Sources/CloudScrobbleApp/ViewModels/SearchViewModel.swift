@@ -26,6 +26,7 @@ final class SearchViewModel: ObservableObject {
     private var tracksNextHref: URL?
     private var playlistsNextHref: URL?
     private var usersNextHref: URL?
+    private var searchTask: Task<Void, Never>?
 
     private unowned let session: AppSessionViewModel
 
@@ -39,6 +40,32 @@ final class SearchViewModel: ObservableObject {
         self.session = session
     }
 
+    deinit {
+        searchTask?.cancel()
+    }
+
+    func scheduleSearch(immediate: Bool = false) {
+        searchTask?.cancel()
+
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            clearResults()
+            errorMessage = nil
+            return
+        }
+
+        guard trimmed.count >= 2 else { return }
+
+        let delay: UInt64 = immediate ? 0 : 420_000_000
+        searchTask = Task { [weak self] in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.runSearch(reset: true)
+        }
+    }
+
     func runSearch(reset: Bool = true) async {
         guard let api = session.apiClient else {
             errorMessage = "Connect SoundCloud first"
@@ -47,9 +74,7 @@ final class SearchViewModel: ObservableObject {
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            tracks = []
-            playlists = []
-            users = []
+            clearResults()
             return
         }
 
@@ -104,7 +129,13 @@ final class SearchViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
-        await session.play(track: track)
+        let contextTracks = playbackContext(for: track)
+        guard let startIndex = contextTracks.firstIndex(where: { $0.id == track.id }) else {
+            await session.play(track: track)
+            return
+        }
+
+        await session.play(tracks: contextTracks, startAt: startIndex)
     }
 
     func open(playlist: SCPlaylist) async {
@@ -137,6 +168,15 @@ final class SearchViewModel: ObservableObject {
         await session.play(tracks: selectedPlaylistTracks, startAt: 0)
     }
 
+    func playSelectedPlaylist(startingWith track: SCTrack) async {
+        guard let startIndex = selectedPlaylistTracks.firstIndex(where: { $0.id == track.id }) else {
+            await session.play(track: track)
+            return
+        }
+
+        await session.play(tracks: selectedPlaylistTracks, startAt: startIndex)
+    }
+
     func open(user: SCUser) async {
         guard let api = session.apiClient else { return }
 
@@ -166,5 +206,27 @@ final class SearchViewModel: ObservableObject {
 
     func clearPlaylistSelection() {
         selectedPlaylistTracks = []
+    }
+
+    private func playbackContext(for track: SCTrack) -> [SCTrack] {
+        switch scope {
+        case .tracks:
+            return tracks.isEmpty ? [track] : tracks
+        case .playlists:
+            return selectedPlaylistTracks.isEmpty ? [track] : selectedPlaylistTracks
+        case .users:
+            return [track]
+        }
+    }
+
+    private func clearResults() {
+        tracks = []
+        playlists = []
+        users = []
+        selectedPlaylistTracks = []
+        selectedUserProfile = nil
+        tracksNextHref = nil
+        playlistsNextHref = nil
+        usersNextHref = nil
     }
 }

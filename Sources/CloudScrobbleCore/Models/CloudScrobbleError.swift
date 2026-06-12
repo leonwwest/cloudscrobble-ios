@@ -36,6 +36,25 @@ public enum CloudScrobbleError: LocalizedError, Sendable {
         case .noCurrentTrack:
             return "No current track selected."
         case .lastFMError(let code, let message):
+            return Self.lastFMErrorDescription(code: code, message: message)
+        }
+    }
+
+    private static func lastFMErrorDescription(code: Int, message: String) -> String {
+        switch code {
+        case 4:
+            return "Last.fm login failed: username or password is wrong."
+        case 9:
+            return "Last.fm session expired. Connect Last.fm again."
+        case 11:
+            return "Last.fm is offline right now. Scrobbles stay queued."
+        case 16:
+            return "Last.fm is temporarily unavailable. Scrobbles stay queued."
+        case 26:
+            return "Last.fm rejected this API key."
+        case 29:
+            return "Last.fm rate limit reached. Scrobbles stay queued."
+        default:
             return "Last.fm error \(code): \(message)"
         }
     }

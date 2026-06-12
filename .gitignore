@@ -10,3 +10,9 @@ DerivedData/
 /.home
 .env
 backend/.env
+workers/**/.dev.vars
+workers/**/.dev.vars.*
+workers/**/.env
+workers/**/.env.*
+workers/**/node_modules/
+workers/**/.wrangler/

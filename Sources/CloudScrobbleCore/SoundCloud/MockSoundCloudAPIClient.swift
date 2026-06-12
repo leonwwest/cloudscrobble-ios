@@ -196,6 +196,10 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
         return SCStreams(hlsAac160URL: Self.demoStreamURL, hlsAac96URL: nil)
     }
 
+    public func streamRequestHeaders() async throws -> [String: String] {
+        [:]
+    }
+
     public func legacyStreamURL(trackURN: String) async throws -> URL {
         guard tracksByURN[trackURN] != nil else {
             throw CloudScrobbleError.invalidConfiguration("Mock track not found for urn: \(trackURN)")
