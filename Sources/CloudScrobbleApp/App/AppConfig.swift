@@ -31,7 +31,17 @@ struct AppConfig {
             return nil
         }
 
-        guard let tokenBrokerBaseURL = URL(string: rawTokenBroker) else {
+        guard let redirectURI = URLComponents(string: rawRedirectURI),
+              let redirectScheme = redirectURI.scheme,
+              !redirectScheme.isEmpty,
+              redirectURI.host != nil || !redirectURI.path.isEmpty else {
+            return nil
+        }
+
+        guard let tokenBrokerBaseURL = URL(string: rawTokenBroker),
+              let tokenBrokerScheme = tokenBrokerBaseURL.scheme?.lowercased(),
+              ["http", "https"].contains(tokenBrokerScheme),
+              tokenBrokerBaseURL.host != nil else {
             return nil
         }
 
