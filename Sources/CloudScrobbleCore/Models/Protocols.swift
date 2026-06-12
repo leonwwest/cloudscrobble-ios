@@ -16,6 +16,8 @@ public protocol SoundCloudAuthProviding: Sendable {
 
 public protocol SoundCloudAPIClienting: Sendable {
     func me() async throws -> SCUser
+    func homeFeed(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity>
+    func homeFeedTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity>
     func searchTracks(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func searchPlaylists(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist>
     func searchUsers(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCUser>

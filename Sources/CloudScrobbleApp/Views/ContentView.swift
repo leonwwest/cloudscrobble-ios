@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     private enum AppTab {
+        case home
         case search
         case library
         case player
@@ -16,7 +17,7 @@ struct ContentView: View {
     @State private var showSettingsSheet = false
     @State private var deckVisible = false
     @State private var pendingLastFMScrobbles = 0
-    @State private var selectedTab: AppTab = .search
+    @State private var selectedTab: AppTab = .home
 
     var body: some View {
         GeometryReader { proxy in
@@ -31,6 +32,10 @@ struct ContentView: View {
                         .offset(y: deckVisible ? 0 : -10)
 
                     TabView(selection: $selectedTab) {
+                        HomeView(session: session, viewModel: HomeViewModel(session: session))
+                            .tabItem { Label("Start", systemImage: "house.fill") }
+                            .tag(AppTab.home)
+
                         SearchView(viewModel: SearchViewModel(session: session))
                             .tabItem { Label("Search", systemImage: "magnifyingglass") }
                             .tag(AppTab.search)

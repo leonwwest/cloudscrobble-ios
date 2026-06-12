@@ -29,6 +29,14 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
         try await get(path: "/me")
     }
 
+    public func homeFeed(limit: Int = 50, nextHref: URL? = nil) async throws -> SCPage<SCActivity> {
+        try await paged(path: "/me/feed", queryItems: feedPageQuery(limit: limit), nextHref: nextHref)
+    }
+
+    public func homeFeedTracks(limit: Int = 50, nextHref: URL? = nil) async throws -> SCPage<SCActivity> {
+        try await paged(path: "/me/feed/tracks", queryItems: feedPageQuery(limit: limit), nextHref: nextHref)
+    }
+
     public func searchTracks(query: String, limit: Int = 50, nextHref: URL? = nil) async throws -> SCPage<SCTrack> {
         try await paged(path: "/tracks", queryItems: [
             .init(name: "q", value: query),
@@ -174,6 +182,13 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
         [
             .init(name: "limit", value: String(limit)),
             .init(name: "linked_partitioning", value: "true")
+        ]
+    }
+
+    private func feedPageQuery(limit: Int) -> [URLQueryItem] {
+        [
+            .init(name: "limit", value: String(limit)),
+            .init(name: "access", value: "playable")
         ]
     }
 }

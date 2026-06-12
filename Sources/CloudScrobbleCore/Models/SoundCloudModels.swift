@@ -88,6 +88,70 @@ public struct SCPlaylist: Codable, Identifiable, Sendable {
     }
 }
 
+public struct SCActivity: Decodable, Identifiable, Sendable {
+    public enum Origin: Sendable {
+        case track(SCTrack)
+        case playlist(SCPlaylist)
+        case unknown
+    }
+
+    public let type: String
+    public let createdAt: String
+    public let origin: Origin
+    public let reposter: String?
+
+    public var id: String {
+        "\(type):\(originID):\(createdAt)"
+    }
+
+    public var track: SCTrack? {
+        if case .track(let track) = origin {
+            return track
+        }
+        return nil
+    }
+
+    public var playlist: SCPlaylist? {
+        if case .playlist(let playlist) = origin {
+            return playlist
+        }
+        return nil
+    }
+
+    private var originID: String {
+        switch origin {
+        case .track(let track):
+            return track.urn
+        case .playlist(let playlist):
+            return playlist.urn
+        case .unknown:
+            return "unknown"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case origin
+        case reposter
+        case createdAt = "created_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(String.self, forKey: .type)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        reposter = try container.decodeIfPresent(String.self, forKey: .reposter)
+
+        if let track = try? container.decode(SCTrack.self, forKey: .origin) {
+            origin = .track(track)
+        } else if let playlist = try? container.decode(SCPlaylist.self, forKey: .origin) {
+            origin = .playlist(playlist)
+        } else {
+            origin = .unknown
+        }
+    }
+}
+
 public struct SCStreams: Codable, Sendable {
     public let hlsAac160URL: URL?
     public let hlsAac96URL: URL?

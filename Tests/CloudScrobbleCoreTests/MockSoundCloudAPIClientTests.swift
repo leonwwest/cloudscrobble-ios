@@ -30,6 +30,8 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let api = MockSoundCloudAPIClient()
 
         let me = try await api.me()
+        let feedTracks = try await api.homeFeedTracks(limit: 10, nextHref: nil).collection.compactMap(\.track)
+        let feedCollections = try await api.homeFeed(limit: 10, nextHref: nil).collection
         let playlists = try await api.myPlaylists(limit: 10, nextHref: nil).collection
         let likedTracks = try await api.myLikedTracks(limit: 10, nextHref: nil).collection
         let likedPlaylists = try await api.myLikedPlaylists(limit: 10, nextHref: nil).collection
@@ -40,6 +42,8 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let streams = try await api.streams(trackURN: firstTrack.urn)
 
         XCTAssertEqual(me.username, "CloudScrobble Demo")
+        XCTAssertFalse(feedTracks.isEmpty)
+        XCTAssertTrue(feedCollections.contains { $0.playlist != nil })
         XCTAssertFalse(playlists.isEmpty)
         XCTAssertFalse(likedTracks.isEmpty)
         XCTAssertFalse(likedPlaylists.isEmpty)
@@ -76,6 +80,8 @@ private actor StreamFixtureAPI: SoundCloudAPIClienting {
     func legacyStreamURL(trackURN: String) async throws -> URL { throw unused() }
 
     func me() async throws -> SCUser { throw unused() }
+    func homeFeed(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity> { throw unused() }
+    func homeFeedTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity> { throw unused() }
     func searchTracks(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> { throw unused() }
     func searchPlaylists(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist> { throw unused() }
     func searchUsers(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCUser> { throw unused() }

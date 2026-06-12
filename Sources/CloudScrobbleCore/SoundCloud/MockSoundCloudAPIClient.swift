@@ -109,6 +109,20 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
         meUser
     }
 
+    public func homeFeed(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity> {
+        try makeActivityPage(
+            origins: [.track(tracks[1]), .playlist(playlists[0]), .track(tracks[2]), .playlist(playlists[1]), .track(tracks[0])],
+            limit: limit
+        )
+    }
+
+    public func homeFeedTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity> {
+        try makeActivityPage(
+            origins: tracks.map { .track($0) },
+            limit: limit
+        )
+    }
+
     public func searchTracks(query: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> {
         makePage(collection: filterTracks(query: query), limit: limit)
     }
@@ -217,6 +231,39 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
     private func makePage<T: Decodable & Sendable>(collection: [T], limit: Int) -> SCPage<T> {
         let sliced = limit > 0 ? Array(collection.prefix(limit)) : collection
         return SCPage(collection: sliced, nextHref: nil)
+    }
+
+    private func makeActivityPage(origins: [SCActivity.Origin], limit: Int) throws -> SCPage<SCActivity> {
+        let formatter = ISO8601DateFormatter()
+        let records = origins.enumerated().map { index, origin in
+            makeActivity(origin: origin, createdAt: formatter.string(from: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index))))
+        }
+        return makePage(collection: records, limit: limit)
+    }
+
+    private func makeActivity(origin: SCActivity.Origin, createdAt: String) -> SCActivity {
+        let originPayload: Any
+        let type: String
+
+        switch origin {
+        case .track(let track):
+            type = "track"
+            originPayload = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(track))
+        case .playlist(let playlist):
+            type = "playlist"
+            originPayload = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(playlist))
+        case .unknown:
+            type = "unknown"
+            originPayload = [:]
+        }
+
+        let payload: [String: Any] = [
+            "type": type,
+            "created_at": createdAt,
+            "origin": originPayload
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: payload)
+        return try! JSONDecoder().decode(SCActivity.self, from: data)
     }
 
     private static func makeTrack(id: String, title: String, artist: String, user: SCUser) -> SCTrack {
