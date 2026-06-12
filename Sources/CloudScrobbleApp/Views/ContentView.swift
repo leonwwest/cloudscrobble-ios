@@ -26,7 +26,7 @@ struct ContentView: View {
                         SearchView(viewModel: SearchViewModel(session: session))
                             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-                        LibraryView(viewModel: LibraryViewModel(session: session))
+                        LibraryView(session: session, viewModel: LibraryViewModel(session: session))
                             .tabItem { Label("Library", systemImage: "books.vertical") }
 
                         PlayerView(controller: session.playerController)

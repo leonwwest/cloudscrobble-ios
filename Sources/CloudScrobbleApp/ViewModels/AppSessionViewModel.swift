@@ -336,17 +336,28 @@ final class AppSessionViewModel: ObservableObject {
         }
     }
 
-    func play(tracks: [SCTrack], startAt: Int = 0) async {
+    func play(tracks: [SCTrack], startAt: Int = 0, maxQueueLength: Int = 25) async {
         guard let playbackResolver = activePlaybackResolver else {
             statusMessage = "Playback resolver unavailable"
             return
         }
 
+        guard !tracks.isEmpty else {
+            statusMessage = "No playable tracks"
+            return
+        }
+
+        let boundedQueue = boundedPlaybackQueue(
+            tracks: tracks,
+            startAt: startAt,
+            maxQueueLength: maxQueueLength
+        )
+
         do {
             var queueItems: [QueueItem] = []
-            queueItems.reserveCapacity(tracks.count)
+            queueItems.reserveCapacity(boundedQueue.tracks.count)
 
-            for track in tracks {
+            for track in boundedQueue.tracks {
                 let stream = try await playbackResolver.resolvePlayableStream(for: track.urn)
                 queueItems.append(
                     QueueItem(
@@ -363,7 +374,7 @@ final class AppSessionViewModel: ObservableObject {
                 )
             }
 
-            playerController.loadQueue(queueItems, startAt: startAt)
+            playerController.loadQueue(queueItems, startAt: boundedQueue.startAt)
             statusMessage = "Loaded \(queueItems.count) tracks"
         } catch {
             statusMessage = "Queue loading failed: \(error.localizedDescription)"
@@ -404,6 +415,23 @@ final class AppSessionViewModel: ObservableObject {
             return "SoundCloud login canceled."
         }
         return "SoundCloud login failed: \(error.localizedDescription)"
+    }
+
+    private func boundedPlaybackQueue(
+        tracks: [SCTrack],
+        startAt: Int,
+        maxQueueLength: Int
+    ) -> (tracks: [SCTrack], startAt: Int) {
+        let clampedStart = min(max(startAt, 0), max(0, tracks.count - 1))
+        let queueLimit = max(1, maxQueueLength)
+
+        guard tracks.count > queueLimit else {
+            return (tracks, clampedStart)
+        }
+
+        let lowerBound = clampedStart < queueLimit ? 0 : clampedStart
+        let upperBound = min(tracks.count, lowerBound + queueLimit)
+        return (Array(tracks[lowerBound..<upperBound]), clampedStart - lowerBound)
     }
 
     private func restoreSavedPlaybackIfPossible() async {

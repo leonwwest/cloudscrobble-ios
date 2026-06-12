@@ -24,6 +24,27 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         XCTAssertNil(streams.hlsAac96URL)
     }
 
+    func testPersonalLibraryCollectionsArePlayable() async throws {
+        let api = MockSoundCloudAPIClient()
+
+        let me = try await api.me()
+        let playlists = try await api.myPlaylists(limit: 10, nextHref: nil).collection
+        let likedTracks = try await api.myLikedTracks(limit: 10, nextHref: nil).collection
+        let likedPlaylists = try await api.myLikedPlaylists(limit: 10, nextHref: nil).collection
+
+        let playlist = try XCTUnwrap(playlists.first)
+        let playlistTracks = try await api.playlistTracks(urn: playlist.urn, limit: 20, nextHref: nil).collection
+        let firstTrack = try XCTUnwrap(playlistTracks.first)
+        let stream = try await api.streams(trackURN: firstTrack.urn)
+
+        XCTAssertEqual(me.username, "CloudScrobble Demo")
+        XCTAssertFalse(playlists.isEmpty)
+        XCTAssertFalse(likedTracks.isEmpty)
+        XCTAssertFalse(likedPlaylists.isEmpty)
+        XCTAssertEqual(playlist.user.urn, me.urn)
+        XCTAssertNotNil(stream.hlsAac160URL)
+    }
+
     func testPlaybackResolverUsesCurrentSoundCloudMP3HLSStreamFields() async throws {
         let hlsURL = URL(string: "https://api.soundcloud.com/tracks/soundcloud:tracks:1/streams/stream-id/hls")!
         let api = StreamFixtureAPI(
