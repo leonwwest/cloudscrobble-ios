@@ -73,35 +73,84 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
             artist: "Lo Skyline",
             user: userLo
         )
+        let t6 = Self.makeTrack(
+            id: "blue-static",
+            title: "Blue Static",
+            artist: "Nova Tide",
+            user: userNova
+        )
+        let t7 = Self.makeTrack(
+            id: "midnight-relay",
+            title: "Midnight Relay",
+            artist: "Ari Pulse",
+            user: userAri
+        )
+        let t8 = Self.makeTrack(
+            id: "soft-reset",
+            title: "Soft Reset",
+            artist: "CloudScrobble Demo",
+            user: userMe
+        )
+        let t9 = Self.makeTrack(
+            id: "city-haze",
+            title: "City Haze",
+            artist: "Lo Skyline",
+            user: userLo
+        )
+        let t10 = Self.makeTrack(
+            id: "signal-bloom",
+            title: "Signal Bloom",
+            artist: "Nova Tide",
+            user: userNova
+        )
+        let t11 = Self.makeTrack(
+            id: "late-window",
+            title: "Late Window",
+            artist: "Ari Pulse",
+            user: userAri
+        )
+        let t12 = Self.makeTrack(
+            id: "orange-room",
+            title: "Orange Room",
+            artist: "CloudScrobble Demo",
+            user: userMe
+        )
 
-        tracks = [t1, t2, t3, t4, t5]
+        tracks = [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12]
         tracksByURN = Dictionary(uniqueKeysWithValues: tracks.map { ($0.urn, $0) })
 
         let p1 = Self.makePlaylist(
             id: "demo-favs",
             title: "Demo Favorites",
             user: userMe,
-            tracks: [t1, t3, t4]
+            tracks: [t1, t3, t4, t8, t12]
         )
         let p2 = Self.makePlaylist(
             id: "night-pack",
             title: "Night Pack",
             user: userAri,
-            tracks: [t2, t5]
+            tracks: [t2, t5, t7, t11]
+        )
+        let p3 = Self.makePlaylist(
+            id: "weekly-wave",
+            title: "Weekly Wave",
+            user: userNova,
+            tracks: [t6, t9, t10, t1]
         )
 
-        playlists = [p1, p2]
+        playlists = [p1, p2, p3]
         playlistsByURN = Dictionary(uniqueKeysWithValues: playlists.map { ($0.urn, $0) })
 
         userTracksIndex = [
-            userMe.urn: [t4],
-            userLo.urn: [t1, t5],
-            userAri.urn: [t2],
-            userNova.urn: [t3]
+            userMe.urn: [t4, t8, t12],
+            userLo.urn: [t1, t5, t9],
+            userAri.urn: [t2, t7, t11],
+            userNova.urn: [t3, t6, t10]
         ]
         userPlaylistsIndex = [
             userMe.urn: [p1],
-            userAri.urn: [p2]
+            userAri.urn: [p2],
+            userNova.urn: [p3]
         ]
     }
 
@@ -178,6 +227,10 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
         makePage(collection: playlists, limit: limit)
     }
 
+    public func myFollowingTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> {
+        makePage(collection: [tracks[8], tracks[6], tracks[9], tracks[10], tracks[4], tracks[1]], limit: limit)
+    }
+
     public func playlist(urn: String, showTracks: Bool) async throws -> SCPlaylist {
         guard let playlist = playlistsByURN[urn] else {
             throw CloudScrobbleError.invalidConfiguration("Mock playlist not found for urn: \(urn)")
@@ -199,6 +252,14 @@ public actor MockSoundCloudAPIClient: SoundCloudAPIClienting {
             throw CloudScrobbleError.invalidConfiguration("Mock track not found for urn: \(urn)")
         }
         return track
+    }
+
+    public func relatedTracks(trackURN: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> {
+        guard let seedIndex = tracks.firstIndex(where: { $0.urn == trackURN }) else {
+            throw CloudScrobbleError.invalidConfiguration("Mock track not found for urn: \(trackURN)")
+        }
+        let related = Array(tracks.dropFirst(seedIndex + 1)) + Array(tracks.prefix(seedIndex))
+        return makePage(collection: related, limit: limit)
     }
 
     public func streams(trackURN: String) async throws -> SCStreams {

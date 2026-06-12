@@ -93,6 +93,10 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
         try await paged(path: "/me/likes/playlists", queryItems: basePageQuery(limit: limit), nextHref: nextHref)
     }
 
+    public func myFollowingTracks(limit: Int = 50, nextHref: URL? = nil) async throws -> SCPage<SCTrack> {
+        try await paged(path: "/me/followings/tracks", queryItems: playablePageQuery(limit: limit), nextHref: nextHref)
+    }
+
     public func playlist(urn: String, showTracks: Bool = true) async throws -> SCPlaylist {
         var queryItems: [URLQueryItem] = []
         if showTracks {
@@ -107,6 +111,10 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
 
     public func track(urn: String) async throws -> SCTrack {
         try await get(path: "/tracks/\(urn)")
+    }
+
+    public func relatedTracks(trackURN: String, limit: Int = 50, nextHref: URL? = nil) async throws -> SCPage<SCTrack> {
+        try await paged(path: "/tracks/\(trackURN)/related", queryItems: playablePageQuery(limit: limit), nextHref: nextHref)
     }
 
     public func streams(trackURN: String) async throws -> SCStreams {
@@ -188,6 +196,14 @@ public actor SoundCloudAPIClient: SoundCloudAPIClienting {
     private func feedPageQuery(limit: Int) -> [URLQueryItem] {
         [
             .init(name: "limit", value: String(limit)),
+            .init(name: "access", value: "playable")
+        ]
+    }
+
+    private func playablePageQuery(limit: Int) -> [URLQueryItem] {
+        [
+            .init(name: "limit", value: String(limit)),
+            .init(name: "linked_partitioning", value: "true"),
             .init(name: "access", value: "playable")
         ]
     }

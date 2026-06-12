@@ -71,6 +71,12 @@ struct HomeView: View {
 
                     mixShelf(mixes: Array(viewModel.homeMixes.dropFirst()))
 
+                    trackShelf(
+                        title: "Aus deinem Feed",
+                        icon: "person.2.fill",
+                        tracks: viewModel.followingTracks
+                    )
+
                     playlistShelf(
                         title: "Deine Playlists",
                         icon: "music.note.list",
@@ -514,25 +520,33 @@ private struct HomePlaylistCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 9) {
                 HomeArtworkTile(url: playlist.artworkURL, iconName: "music.note.list")
                     .frame(width: 150, height: 150)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(playlist.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(2)
+                            .frame(height: 38, alignment: .top)
+                        Text(playlist.user.username)
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(playlist.title)")
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(playlist.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.black))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(2)
-                    .frame(height: 38, alignment: .top)
-                Text(playlist.user.username)
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(1)
-            }
+            .accessibilityLabel("Open \(playlist.title) tracks")
 
             HStack(spacing: 8) {
+                Button(action: onOpen) {
+                    Label("Tracks", systemImage: "list.bullet")
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .accessibilityLabel("Show tracks in \(playlist.title)")
+
                 Button(action: onPlay) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 13, weight: .bold))
@@ -542,16 +556,6 @@ private struct HomePlaylistCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play \(playlist.title)")
-
-                Button(action: onOpen) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CloudTheme.ink)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(CloudTheme.elevatedStrong))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(playlist.title)")
             }
         }
         .padding(10)

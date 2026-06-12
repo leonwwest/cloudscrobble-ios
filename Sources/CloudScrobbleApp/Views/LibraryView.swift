@@ -5,8 +5,25 @@ import UIKit
 #endif
 
 struct LibraryView: View {
+    private enum LibraryScope: String, CaseIterable, Identifiable {
+        case overview = "Übersicht"
+        case likes = "Likes"
+        case playlists = "Playlists"
+        case history = "Verlauf"
+
+        var id: String { rawValue }
+    }
+
     @ObservedObject var session: AppSessionViewModel
-    @StateObject var viewModel: LibraryViewModel
+    @ObservedObject private var playerController: PlayerScrobbleController
+    @StateObject private var viewModel: LibraryViewModel
+    @State private var scope: LibraryScope = .overview
+
+    init(session: AppSessionViewModel, viewModel: LibraryViewModel) {
+        self.session = session
+        _playerController = ObservedObject(wrappedValue: session.playerController)
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     private var libraryRefreshID: String {
         [
@@ -37,6 +54,8 @@ struct LibraryView: View {
                     Task { await viewModel.refresh() }
                 }
 
+                libraryScopeTabs
+
                 if let errorMessage = viewModel.errorMessage {
                     LibraryMessageBanner(message: errorMessage)
                 }
@@ -50,20 +69,7 @@ struct LibraryView: View {
                         subtitle: "Connect SoundCloud with full login to load your playlists and likes."
                     )
                 } else {
-                    smartMixSection
-                    playlistShelf(
-                        title: "Your Playlists",
-                        icon: "music.note.list",
-                        playlists: viewModel.myPlaylists,
-                        emptyText: "No playlists"
-                    )
-                    likedTracksSection
-                    playlistShelf(
-                        title: "Liked Playlists",
-                        icon: "heart.rectangle.fill",
-                        playlists: viewModel.myLikedPlaylists,
-                        emptyText: "No liked playlists"
-                    )
+                    scopedContent
                 }
             }
             .padding(.vertical, 10)
@@ -110,6 +116,96 @@ struct LibraryView: View {
             || !viewModel.myPlaylists.isEmpty
             || !viewModel.myLikedTracks.isEmpty
             || !viewModel.myLikedPlaylists.isEmpty
+            || !playerController.recentlyPlayed.isEmpty
+    }
+
+    private var libraryScopeTabs: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 18) {
+                ForEach(LibraryScope.allCases) { tab in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            scope = tab
+                        }
+                    } label: {
+                        Text(tab.rawValue)
+                            .font(.system(.headline, design: .rounded).weight(.black))
+                            .foregroundStyle(scope == tab ? CloudTheme.ink : CloudTheme.muted)
+                            .padding(.vertical, 8)
+                            .overlay(alignment: .bottom) {
+                                Capsule()
+                                    .fill(scope == tab ? CloudTheme.ink : Color.clear)
+                                    .frame(height: 2)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show \(tab.rawValue)")
+                }
+            }
+            .padding(.horizontal, 1)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder
+    private var scopedContent: some View {
+        switch scope {
+        case .overview:
+            recentSection
+            smartMixSection
+            playlistShelf(
+                title: "Playlists",
+                icon: "music.note.list",
+                playlists: viewModel.myPlaylists,
+                emptyText: "No playlists"
+            )
+            likedTracksSection
+        case .likes:
+            likedTracksSection
+            playlistShelf(
+                title: "Liked Playlists",
+                icon: "heart.rectangle.fill",
+                playlists: viewModel.myLikedPlaylists,
+                emptyText: "No liked playlists"
+            )
+        case .playlists:
+            playlistShelf(
+                title: "Your Playlists",
+                icon: "music.note.list",
+                playlists: viewModel.myPlaylists,
+                emptyText: "No playlists"
+            )
+            playlistShelf(
+                title: "Liked Playlists",
+                icon: "heart.rectangle.fill",
+                playlists: viewModel.myLikedPlaylists,
+                emptyText: "No liked playlists"
+            )
+        case .history:
+            recentSection
+        }
+    }
+
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LibrarySectionHeader(title: "Kürzlich abgespielt", icon: "clock.arrow.circlepath")
+
+            if playerController.recentlyPlayed.isEmpty {
+                LibraryEmptyRow(text: "No playback history yet")
+            } else {
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 12) {
+                        ForEach(playerController.recentlyPlayed.prefix(18)) { track in
+                            LibraryRecentTrackCard(track: track) {
+                                Task { await viewModel.play(savedTrack: track) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
     }
 
     @ViewBuilder
@@ -388,6 +484,52 @@ private struct LibraryPlaylistCard: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(playlist.title)")
             }
+        }
+        .padding(10)
+        .frame(width: 170, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
+        )
+    }
+}
+
+private struct LibraryRecentTrackCard: View {
+    let track: SavedPlaybackTrack
+    let onPlay: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .bottomTrailing) {
+                ArtworkTile(url: track.artworkURL, iconName: "clock.arrow.circlepath")
+                    .frame(width: 148, height: 148)
+
+                Button(action: onPlay) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(CloudTheme.sky))
+                        .shadow(color: .black.opacity(0.28), radius: 8, x: 0, y: 4)
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .accessibilityLabel("Play \(track.title)")
+            }
+
+            Text(track.title)
+                .font(.system(.subheadline, design: .rounded).weight(.black))
+                .foregroundStyle(CloudTheme.ink)
+                .lineLimit(2)
+                .frame(height: 38, alignment: .top)
+            Text(track.artistDisplay)
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(CloudTheme.muted)
+                .lineLimit(1)
         }
         .padding(10)
         .frame(width: 170, alignment: .leading)

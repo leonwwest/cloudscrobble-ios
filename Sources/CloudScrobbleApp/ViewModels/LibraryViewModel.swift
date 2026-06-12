@@ -140,6 +140,15 @@ final class LibraryViewModel: ObservableObject {
         await session.play(tracks: mix.tracks, startAt: 0)
     }
 
+    func play(savedTrack: SavedPlaybackTrack) async {
+        guard let session else {
+            errorMessage = "App session unavailable"
+            return
+        }
+
+        await session.play(savedTrack: savedTrack)
+    }
+
     func open(playlist: SCPlaylist) async {
         guard let session, let api = session.apiClient else {
             errorMessage = "Connect SoundCloud first"

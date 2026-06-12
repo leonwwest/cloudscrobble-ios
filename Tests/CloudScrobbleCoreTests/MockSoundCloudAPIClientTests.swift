@@ -32,6 +32,7 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let me = try await api.me()
         let feedTracks = try await api.homeFeedTracks(limit: 10, nextHref: nil).collection.compactMap(\.track)
         let feedCollections = try await api.homeFeed(limit: 10, nextHref: nil).collection
+        let followingTracks = try await api.myFollowingTracks(limit: 10, nextHref: nil).collection
         let playlists = try await api.myPlaylists(limit: 10, nextHref: nil).collection
         let likedTracks = try await api.myLikedTracks(limit: 10, nextHref: nil).collection
         let likedPlaylists = try await api.myLikedPlaylists(limit: 10, nextHref: nil).collection
@@ -39,14 +40,17 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         let playlist = try XCTUnwrap(playlists.first)
         let playlistTracks = try await api.playlistTracks(urn: playlist.urn, limit: 20, nextHref: nil).collection
         let firstTrack = try XCTUnwrap(playlistTracks.first)
+        let relatedTracks = try await api.relatedTracks(trackURN: firstTrack.urn, limit: 20, nextHref: nil).collection
         let streams = try await api.streams(trackURN: firstTrack.urn)
 
         XCTAssertEqual(me.username, "CloudScrobble Demo")
         XCTAssertFalse(feedTracks.isEmpty)
         XCTAssertTrue(feedCollections.contains { $0.playlist != nil })
+        XCTAssertFalse(followingTracks.isEmpty)
         XCTAssertFalse(playlists.isEmpty)
         XCTAssertFalse(likedTracks.isEmpty)
         XCTAssertFalse(likedPlaylists.isEmpty)
+        XCTAssertFalse(relatedTracks.isEmpty)
         XCTAssertEqual(playlist.user.urn, me.urn)
         XCTAssertNil(streams.hlsAac160URL)
     }
@@ -93,9 +97,11 @@ private actor StreamFixtureAPI: SoundCloudAPIClienting {
     func myPlaylists(limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist> { throw unused() }
     func myLikedTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> { throw unused() }
     func myLikedPlaylists(limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist> { throw unused() }
+    func myFollowingTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> { throw unused() }
     func playlist(urn: String, showTracks: Bool) async throws -> SCPlaylist { throw unused() }
     func playlistTracks(urn: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> { throw unused() }
     func track(urn: String) async throws -> SCTrack { throw unused() }
+    func relatedTracks(trackURN: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack> { throw unused() }
 
     private func unused() -> CloudScrobbleError {
         .invalidConfiguration("Unused test fixture endpoint")

@@ -483,16 +483,17 @@ final class AppSessionViewModel: ObservableObject {
         resolver: PlaybackResolving
     ) async throws -> QueueItem {
         let stream = try await resolver.resolvePlayableStream(for: track.urn)
+        let lastFM = MetadataMapper.mapLastFM(track: track)
         return QueueItem(
             trackURN: track.urn,
-            title: track.title,
-            artistDisplay: track.user.username,
+            title: lastFM.track,
+            artistDisplay: lastFM.artist,
             artworkURL: track.artworkURL,
             permalinkURL: track.permalinkURL,
             streamURL: stream.url,
             streamHeaders: stream.headers,
             durationSeconds: max(0, track.durationMs / 1000),
-            lastFM: MetadataMapper.mapLastFM(track: track)
+            lastFM: lastFM
         )
     }
 

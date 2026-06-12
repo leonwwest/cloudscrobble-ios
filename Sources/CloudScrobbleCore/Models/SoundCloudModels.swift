@@ -8,6 +8,27 @@ public struct SCPage<T: Decodable & Sendable>: Decodable, Sendable {
         case collection
         case nextHref = "next_href"
     }
+
+    public init(collection: [T], nextHref: URL? = nil) {
+        self.collection = collection
+        self.nextHref = nextHref
+    }
+
+    public init(from decoder: Decoder) throws {
+        if var unkeyedContainer = try? decoder.unkeyedContainer() {
+            var collection: [T] = []
+            while !unkeyedContainer.isAtEnd {
+                collection.append(try unkeyedContainer.decode(T.self))
+            }
+            self.collection = collection
+            nextHref = nil
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        collection = try container.decode([T].self, forKey: .collection)
+        nextHref = try container.decodeIfPresent(URL.self, forKey: .nextHref)
+    }
 }
 
 public struct SCUser: Codable, Identifiable, Sendable {

@@ -29,9 +29,11 @@ public protocol SoundCloudAPIClienting: Sendable {
     func myPlaylists(limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist>
     func myLikedTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func myLikedPlaylists(limit: Int, nextHref: URL?) async throws -> SCPage<SCPlaylist>
+    func myFollowingTracks(limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func playlist(urn: String, showTracks: Bool) async throws -> SCPlaylist
     func playlistTracks(urn: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func track(urn: String) async throws -> SCTrack
+    func relatedTracks(trackURN: String, limit: Int, nextHref: URL?) async throws -> SCPage<SCTrack>
     func streams(trackURN: String) async throws -> SCStreams
     func streamRequestHeaders() async throws -> [String: String]
     func legacyStreamURL(trackURN: String) async throws -> URL

@@ -10,6 +10,7 @@ final class HomeViewModel: ObservableObject {
     private struct CachedHome: Codable {
         let me: SCUser?
         let feedTracks: [SCTrack]
+        let followingTracks: [SCTrack]
         let recommendedTracks: [SCTrack]
         let homePlaylists: [SCPlaylist]
         let likedTracks: [SCTrack]
@@ -37,6 +38,7 @@ final class HomeViewModel: ObservableObject {
 
     @Published private(set) var me: SCUser?
     @Published private(set) var feedTracks: [SCTrack] = []
+    @Published private(set) var followingTracks: [SCTrack] = []
     @Published private(set) var recommendedTracks: [SCTrack] = []
     @Published private(set) var homePlaylists: [SCPlaylist] = []
     @Published private(set) var likedTracks: [SCTrack] = []
@@ -197,6 +199,7 @@ final class HomeViewModel: ObservableObject {
 
     private var hasHomeContent: Bool {
         !feedTracks.isEmpty
+            || !followingTracks.isEmpty
             || !recommendedTracks.isEmpty
             || !homePlaylists.isEmpty
             || !likedTracks.isEmpty
@@ -207,6 +210,7 @@ final class HomeViewModel: ObservableObject {
     private func loadPersonalStart(api: SoundCloudAPIClienting) async {
         var nextMe = me
         var nextFeedTracks = feedTracks
+        var nextFollowingTracks = followingTracks
         var nextHomePlaylists = homePlaylists
         var nextLikedTracks = likedTracks
         var nextLikedPlaylists = likedPlaylists
@@ -256,6 +260,13 @@ final class HomeViewModel: ObservableObject {
             errors.append("liked playlists")
         }
 
+        do {
+            let followingTracksPage = try await api.myFollowingTracks(limit: 50, nextHref: nil)
+            nextFollowingTracks = followingTracksPage.collection
+        } catch {
+            errors.append("following tracks")
+        }
+
         let playlistTracks = await loadTrackSamples(
             from: nextHomePlaylists,
             api: api,
@@ -271,13 +282,20 @@ final class HomeViewModel: ObservableObject {
 
         let seedTracks = Self.uniqueTracks(
             nextFeedTracks
+                + nextFollowingTracks
                 + nextLikedTracks
                 + playlistTracks
                 + likedPlaylistTracks
         )
-        let fallbackTracks = await discoveryFallbackTracks(
+        let relatedMixes = await relatedMixes(
+            from: seedTracks,
             api: api,
-            existingCount: seedTracks.count,
+            username: nextMe?.username
+        )
+        let relatedTracks = Self.uniqueTracks(relatedMixes.flatMap(\.tracks))
+        let discoveryTracks = await discoveryFallbackTracks(
+            api: api,
+            existingCount: Self.uniqueTracks(seedTracks + relatedTracks).count,
             username: nextMe?.username
         )
 
@@ -285,18 +303,25 @@ final class HomeViewModel: ObservableObject {
             nextFeedTracks = nextLikedTracks
         }
         if nextFeedTracks.count < 8 {
-            nextFeedTracks = Array(Self.uniqueTracks(nextFeedTracks + seedTracks + fallbackTracks).prefix(24))
+            nextFeedTracks = Array(Self.uniqueTracks(nextFeedTracks + nextFollowingTracks + discoveryTracks).prefix(24))
         }
 
-        let nextRecommended = Self.uniqueTracks(seedTracks + fallbackTracks)
+        let nextRecommended = Self.uniqueTracks(seedTracks + relatedTracks + discoveryTracks)
 
         me = nextMe
         feedTracks = nextFeedTracks
+        followingTracks = nextFollowingTracks
         recommendedTracks = nextRecommended
         homePlaylists = nextHomePlaylists
         likedTracks = nextLikedTracks
         likedPlaylists = nextLikedPlaylists
-        homeMixes = Self.buildHomeMixes(from: nextRecommended, username: nextMe?.username)
+        homeMixes = Self.buildHomeMixes(
+            feedTracks: nextFeedTracks,
+            followingTracks: nextFollowingTracks,
+            likedTracks: nextLikedTracks,
+            relatedMixes: relatedMixes,
+            username: nextMe?.username
+        )
         selectedPlaylist = nil
         persistCachedHome()
 
@@ -318,11 +343,18 @@ final class HomeViewModel: ObservableObject {
 
             me = nil
             feedTracks = discovery.collection
+            followingTracks = []
             recommendedTracks = tracks
             homePlaylists = playlists.collection
             likedTracks = []
             likedPlaylists = []
-            homeMixes = Self.buildHomeMixes(from: tracks, username: nil)
+            homeMixes = Self.buildHomeMixes(
+                feedTracks: discovery.collection,
+                followingTracks: [],
+                likedTracks: alternates.collection,
+                relatedMixes: [],
+                username: nil
+            )
             selectedPlaylist = nil
             message = "Full SoundCloud login is needed for your personal Start. Showing public discovery."
         } catch {
@@ -344,6 +376,42 @@ final class HomeViewModel: ObservableObject {
             tracks.append(contentsOf: playlistTracks.prefix(maxTracksPerPlaylist))
         }
         return Self.uniqueTracks(tracks)
+    }
+
+    private func relatedMixes(
+        from seedTracks: [SCTrack],
+        api: SoundCloudAPIClienting,
+        username: String?
+    ) async -> [HomeMix] {
+        var mixes: [HomeMix] = []
+        var usedTracks = Set<String>()
+
+        for seed in seedTracks.prefix(7) {
+            guard mixes.count < 5 else { break }
+            guard let page = try? await api.relatedTracks(trackURN: seed.urn, limit: 25, nextHref: nil) else {
+                continue
+            }
+
+            let uniqueRelated = Self.uniqueTracks(page.collection)
+                .filter { track in
+                    guard track.id != seed.id else { return false }
+                    return !usedTracks.contains(track.id)
+                }
+            guard uniqueRelated.count >= 2 else { continue }
+
+            uniqueRelated.prefix(18).forEach { usedTracks.insert($0.id) }
+            mixes.append(
+                HomeMix(
+                    id: "mein-mix-\(mixes.count + 1)-\(seed.id)",
+                    title: "Mein Mix \(mixes.count + 1)",
+                    subtitle: "\(uniqueRelated.prefix(18).count) ähnliche Tracks zu \(seed.title)",
+                    tracks: Array(uniqueRelated.prefix(18)),
+                    iconName: mixes.count.isMultiple(of: 2) ? "sparkles" : "dot.radiowaves.left.and.right"
+                )
+            )
+        }
+
+        return mixes
     }
 
     private func discoveryFallbackTracks(
@@ -401,39 +469,52 @@ final class HomeViewModel: ObservableObject {
         return detailedTracks
     }
 
-    private static func buildHomeMixes(from tracks: [SCTrack], username: String?) -> [HomeMix] {
-        let uniqueTracks = uniqueTracks(tracks)
-        guard !uniqueTracks.isEmpty else { return [] }
+    private static func buildHomeMixes(
+        feedTracks: [SCTrack],
+        followingTracks: [SCTrack],
+        likedTracks: [SCTrack],
+        relatedMixes: [HomeMix],
+        username: String?
+    ) -> [HomeMix] {
+        let dailyDrops = uniqueTracks(feedTracks + followingTracks)
+        let weeklyWave = uniqueTracks(followingTracks + feedTracks)
+        let fallback = uniqueTracks(likedTracks + feedTracks + followingTracks)
+        guard !dailyDrops.isEmpty || !weeklyWave.isEmpty || !relatedMixes.isEmpty || !fallback.isEmpty else {
+            return []
+        }
 
-        var mixes: [HomeMix] = [
-            HomeMix(
+        var mixes: [HomeMix] = []
+
+        if !dailyDrops.isEmpty {
+            mixes.append(HomeMix(
                 id: "daily-drops",
                 title: "Daily Drops",
-                subtitle: username.map { "Neue Picks für \($0)" } ?? "Neue SoundCloud Picks",
-                tracks: Array(uniqueTracks.prefix(18)),
+                subtitle: username.map { "Neue Tracks aus \($0)s Start" } ?? "Neue SoundCloud Tracks",
+                tracks: Array(dailyDrops.prefix(24)),
                 iconName: "sparkles"
-            ),
-            HomeMix(
+            ))
+        }
+
+        if !weeklyWave.isEmpty {
+            mixes.append(HomeMix(
                 id: "weekly-wave",
                 title: "Weekly Wave",
-                subtitle: "\(min(uniqueTracks.count, 20)) Tracks aus deinem Start",
-                tracks: Self.rotated(uniqueTracks, by: max(1, uniqueTracks.count / 3), limit: 20),
+                subtitle: "\(min(weeklyWave.count, 24)) Tracks von deinem Feed und Followings",
+                tracks: Array(weeklyWave.prefix(24)),
                 iconName: "waveform"
-            )
-        ]
+            ))
+        }
 
-        for offset in 0..<5 {
-            let tracks = Self.rotated(uniqueTracks, by: offset * 3 + 1, limit: 18)
-            guard !tracks.isEmpty else { continue }
-            mixes.append(
-                HomeMix(
-                    id: "mein-mix-\(offset + 1)",
-                    title: "Mein Mix \(offset + 1)",
-                    subtitle: "\(tracks.count) Tracks aus Feed, Likes und Playlists",
-                    tracks: tracks,
-                    iconName: offset.isMultiple(of: 2) ? "sparkles" : "dot.radiowaves.left.and.right"
-                )
-            )
+        mixes.append(contentsOf: relatedMixes)
+
+        if mixes.isEmpty, !fallback.isEmpty {
+            mixes.append(HomeMix(
+                id: "start-fallback",
+                title: "Mehr für dich",
+                subtitle: "\(min(fallback.count, 24)) Tracks aus deiner SoundCloud-Bibliothek",
+                tracks: Array(fallback.prefix(24)),
+                iconName: "sparkles"
+            ))
         }
 
         return mixes
@@ -458,13 +539,6 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private static func rotated(_ tracks: [SCTrack], by offset: Int, limit: Int) -> [SCTrack] {
-        guard !tracks.isEmpty else { return [] }
-        let normalizedOffset = offset % tracks.count
-        let rotated = Array(tracks.dropFirst(normalizedOffset)) + Array(tracks.prefix(normalizedOffset))
-        return Array(rotated.prefix(limit))
-    }
-
     private static func uniquePlaylists(_ playlists: [SCPlaylist]) -> [SCPlaylist] {
         var seen = Set<String>()
         return playlists.filter { playlist in
@@ -480,17 +554,25 @@ final class HomeViewModel: ObservableObject {
 
         me = cached.me
         feedTracks = cached.feedTracks
+        followingTracks = cached.followingTracks
         recommendedTracks = cached.recommendedTracks
         homePlaylists = cached.homePlaylists
         likedTracks = cached.likedTracks
         likedPlaylists = cached.likedPlaylists
-        homeMixes = Self.buildHomeMixes(from: cached.recommendedTracks, username: cached.me?.username)
+        homeMixes = Self.buildHomeMixes(
+            feedTracks: cached.feedTracks,
+            followingTracks: cached.followingTracks,
+            likedTracks: cached.likedTracks,
+            relatedMixes: [],
+            username: cached.me?.username
+        )
     }
 
     private func persistCachedHome() {
         let cached = CachedHome(
             me: me,
             feedTracks: feedTracks,
+            followingTracks: followingTracks,
             recommendedTracks: recommendedTracks,
             homePlaylists: homePlaylists,
             likedTracks: likedTracks,
