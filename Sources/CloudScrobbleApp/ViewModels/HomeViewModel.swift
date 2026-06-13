@@ -168,13 +168,8 @@ final class HomeViewModel: ObservableObject {
         isLoadingPlaylist = true
         defer { isLoadingPlaylist = false }
 
-        do {
-            let tracks = try await session.loadPlaylistTracks(for: playlist)
-            await session.playPlaylist(tracks: tracks, startAt: 0)
-            message = nil
-        } catch {
-            message = "Playlist playback failed: \(error.localizedDescription)"
-        }
+        await session.playPlaylist(playlist)
+        message = nil
     }
 
     func playSelectedPlaylist() async {

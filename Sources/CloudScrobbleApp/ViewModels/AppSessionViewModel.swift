@@ -37,6 +37,8 @@ final class AppSessionViewModel: ObservableObject {
     private let lastFMScrobbleService: LastFMScrobbleSending?
     private var pendingSoundCloudAuthorization: PendingSoundCloudAuthorization?
     private var statusDismissalTask: Task<Void, Never>?
+    private var queueFillTask: Task<Void, Never>?
+    private var queueFillGeneration = UUID()
     private var didAttemptPlaybackRestore = false
 
     init(config: AppConfig? = AppConfig.load()) {
@@ -298,6 +300,7 @@ final class AppSessionViewModel: ObservableObject {
             try? await soundCloudAuthService.clearCachedToken()
         }
         pendingSoundCloudAuthorization = nil
+        cancelQueueFill()
         playerController.clearSavedPlaybackSnapshot()
         deactivateSoundCloudMode()
     }
@@ -310,6 +313,8 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(track: SCTrack) async {
+        cancelQueueFill()
+
         guard !soundCloudMockMode else {
             statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
             return
@@ -330,6 +335,8 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func play(tracks: [SCTrack], startAt: Int = 0, maxQueueLength: Int = 25) async {
+        cancelQueueFill()
+
         guard !soundCloudMockMode else {
             statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
             return
@@ -367,7 +374,57 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     func playPlaylist(tracks: [SCTrack], startAt: Int = 0) async {
-        await play(tracks: tracks, startAt: startAt, maxQueueLength: tracks.count)
+        await playProgressivePlaylist(tracks: tracks, startAt: startAt)
+    }
+
+    func playPlaylist(_ playlist: SCPlaylist) async {
+        cancelQueueFill()
+
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
+        guard let api = apiClient else {
+            statusMessage = "Connect SoundCloud first"
+            return
+        }
+
+        guard let playbackResolver = activePlaybackResolver else {
+            statusMessage = "Playback resolver unavailable"
+            return
+        }
+
+        do {
+            let page = try await api.playlistTracks(urn: playlist.urn, limit: 100, nextHref: nil)
+            if !page.collection.isEmpty {
+                let generation = UUID()
+                queueFillGeneration = generation
+                let remaining = try await startProgressivePlaylistPlayback(
+                    tracks: page.collection,
+                    startAt: 0,
+                    resolver: playbackResolver,
+                    generation: generation
+                )
+                startPlaylistPageQueueFill(
+                    initialTracks: remaining,
+                    playlistURN: playlist.urn,
+                    nextHref: page.nextHref,
+                    resolver: playbackResolver,
+                    generation: generation
+                )
+                return
+            }
+        } catch {
+            // Fall back to the playlist detail payload below. Some SoundCloud playlists only expose compact entries there.
+        }
+
+        do {
+            let tracks = try await loadPlaylistTracks(for: playlist)
+            await playProgressivePlaylist(tracks: tracks, startAt: 0)
+        } catch {
+            statusMessage = "Playlist playback failed: \(error.localizedDescription)"
+        }
     }
 
     func addToQueue(track: SCTrack) async {
@@ -531,6 +588,184 @@ final class AppSessionViewModel: ObservableObject {
         return (Array(tracks[lowerBound..<upperBound]), clampedStart - lowerBound)
     }
 
+    private func cancelQueueFill() {
+        queueFillTask?.cancel()
+        queueFillTask = nil
+        queueFillGeneration = UUID()
+    }
+
+    private func playProgressivePlaylist(tracks: [SCTrack], startAt: Int) async {
+        cancelQueueFill()
+
+        guard !soundCloudMockMode else {
+            statusMessage = "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode."
+            return
+        }
+
+        guard let playbackResolver = activePlaybackResolver else {
+            statusMessage = "Playback resolver unavailable"
+            return
+        }
+
+        let generation = UUID()
+        queueFillGeneration = generation
+
+        do {
+            let remaining = try await startProgressivePlaylistPlayback(
+                tracks: tracks,
+                startAt: startAt,
+                resolver: playbackResolver,
+                generation: generation
+            )
+            startQueueFillTask(
+                tracks: remaining,
+                resolver: playbackResolver,
+                generation: generation
+            )
+        } catch {
+            statusMessage = "Queue loading failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func startProgressivePlaylistPlayback(
+        tracks: [SCTrack],
+        startAt: Int,
+        resolver: PlaybackResolving,
+        generation: UUID
+    ) async throws -> [SCTrack] {
+        guard !tracks.isEmpty else {
+            statusMessage = "No playable tracks"
+            return []
+        }
+
+        let playbackOrder = playlistPlaybackOrder(tracks: tracks, startAt: startAt)
+        guard let firstTrack = playbackOrder.first else {
+            statusMessage = "No playable tracks"
+            return []
+        }
+
+        let firstItem = try await makeQueueItem(for: firstTrack, resolver: resolver)
+        guard queueFillGeneration == generation else { return [] }
+
+        playerController.loadQueue([firstItem], startAt: 0)
+        statusMessage = playbackOrder.count == 1
+            ? "Playing \(firstTrack.title)"
+            : "Playing \(firstTrack.title). Loading queue..."
+        return Array(playbackOrder.dropFirst())
+    }
+
+    private func playlistPlaybackOrder(tracks: [SCTrack], startAt: Int) -> [SCTrack] {
+        guard !tracks.isEmpty else { return [] }
+        let clampedStart = min(max(startAt, 0), tracks.count - 1)
+        guard clampedStart > 0 else { return tracks }
+        return Array(tracks[clampedStart...]) + Array(tracks[..<clampedStart])
+    }
+
+    private func startQueueFillTask(
+        tracks: [SCTrack],
+        resolver: PlaybackResolving,
+        generation: UUID
+    ) {
+        guard !tracks.isEmpty else { return }
+
+        queueFillTask = Task { [weak self, tracks, resolver, generation] in
+            var loadedCount = 1
+            var skippedCount = 0
+
+            for track in tracks {
+                guard !Task.isCancelled else { return }
+
+                do {
+                    let item = try await self?.makeQueueItem(for: track, resolver: resolver)
+                    guard let item, !Task.isCancelled else { return }
+                    let shouldContinue = await MainActor.run { [weak self] in
+                        guard let self, self.queueFillGeneration == generation else { return false }
+                        self.playerController.appendToQueue(item, showDebug: false)
+                        return true
+                    }
+                    guard shouldContinue else { return }
+                    loadedCount += 1
+                } catch {
+                    skippedCount += 1
+                }
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.queueFillGeneration == generation else { return }
+                if skippedCount == 0 {
+                    self.statusMessage = "Loaded \(loadedCount) tracks"
+                } else {
+                    self.statusMessage = "Loaded \(loadedCount) tracks (\(skippedCount) skipped)"
+                }
+                self.queueFillTask = nil
+            }
+        }
+    }
+
+    private func startPlaylistPageQueueFill(
+        initialTracks: [SCTrack],
+        playlistURN: String,
+        nextHref: URL?,
+        resolver: PlaybackResolving,
+        generation: UUID
+    ) {
+        guard !initialTracks.isEmpty || nextHref != nil else { return }
+        guard let api = apiClient else { return }
+
+        queueFillTask = Task { [weak self, api, initialTracks, playlistURN, nextHref, resolver, generation] in
+            var loadedCount = 1
+            var skippedCount = 0
+            var tracksToAppend = initialTracks
+            var nextPageHref = nextHref
+
+            while true {
+                for track in tracksToAppend {
+                    guard !Task.isCancelled else { return }
+
+                    do {
+                        let item = try await self?.makeQueueItem(for: track, resolver: resolver)
+                        guard let item, !Task.isCancelled else { return }
+                        let shouldContinue = await MainActor.run { [weak self] in
+                            guard let self, self.queueFillGeneration == generation else { return false }
+                            self.playerController.appendToQueue(item, showDebug: false)
+                            return true
+                        }
+                        guard shouldContinue else { return }
+                        loadedCount += 1
+                    } catch {
+                        skippedCount += 1
+                    }
+                }
+
+                guard let href = nextPageHref else { break }
+                guard !Task.isCancelled else { return }
+
+                do {
+                    let page = try await api.playlistTracks(
+                        urn: playlistURN,
+                        limit: 100,
+                        nextHref: href
+                    )
+                    tracksToAppend = page.collection
+                    nextPageHref = page.nextHref
+                } catch {
+                    skippedCount += 1
+                    break
+                }
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.queueFillGeneration == generation else { return }
+                if skippedCount == 0 {
+                    self.statusMessage = "Loaded \(loadedCount) tracks"
+                } else {
+                    self.statusMessage = "Loaded \(loadedCount) tracks (\(skippedCount) skipped)"
+                }
+                self.queueFillTask = nil
+            }
+        }
+    }
+
     private func playlistTrackEntries(
         for playlist: SCPlaylist,
         api: SoundCloudAPIClienting,
@@ -558,7 +793,7 @@ final class AppSessionViewModel: ObservableObject {
         return tracks
     }
 
-    private func makeQueueItem(
+    private nonisolated func makeQueueItem(
         for track: SCTrack,
         resolver: PlaybackResolving
     ) async throws -> QueueItem {

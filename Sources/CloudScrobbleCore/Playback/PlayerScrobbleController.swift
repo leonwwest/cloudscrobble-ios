@@ -138,7 +138,7 @@ public final class PlayerScrobbleController: ObservableObject {
         rebuildPlayerQueue(startAt: index)
     }
 
-    public func appendToQueue(_ item: QueueItem) {
+    public func appendToQueue(_ item: QueueItem, showDebug: Bool = true) {
         orderedQueue.append(item)
         queue.append(item)
 
@@ -149,9 +149,11 @@ public final class PlayerScrobbleController: ObservableObject {
 
         if currentIndex == nil {
             rebuildPlayerQueue(startAt: 0)
-        } else {
+        } else if showDebug {
             persistPlaybackSnapshot()
             setDebugStatus("Added to queue", autoDismissAfter: 2_500_000_000)
+        } else {
+            persistPlaybackSnapshot()
         }
     }
 

@@ -197,13 +197,8 @@ final class LibraryViewModel: ObservableObject {
         isLoadingPlaylist = true
         defer { isLoadingPlaylist = false }
 
-        do {
-            let tracks = try await session.loadPlaylistTracks(for: playlist)
-            await session.playPlaylist(tracks: tracks, startAt: 0)
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await session.playPlaylist(playlist)
+        errorMessage = nil
     }
 
     func playSelectedPlaylist() async {
