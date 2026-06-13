@@ -67,3 +67,35 @@ public struct LastFMSession: Codable, Sendable {
     public let key: String
     public let subscriber: Int
 }
+
+public struct LastFMTasteProfile: Codable, Equatable, Sendable {
+    public let username: String
+    public let recentTracks: [LastFMTasteTrack]
+    public let topArtists: [LastFMTasteArtist]
+
+    public init(username: String, recentTracks: [LastFMTasteTrack], topArtists: [LastFMTasteArtist]) {
+        self.username = username
+        self.recentTracks = recentTracks
+        self.topArtists = topArtists
+    }
+}
+
+public struct LastFMTasteTrack: Codable, Equatable, Sendable {
+    public let artist: String
+    public let name: String
+
+    public init(artist: String, name: String) {
+        self.artist = artist
+        self.name = name
+    }
+}
+
+public struct LastFMTasteArtist: Codable, Equatable, Sendable {
+    public let name: String
+    public let playcount: Int
+
+    public init(name: String, playcount: Int) {
+        self.name = name
+        self.playcount = playcount
+    }
+}

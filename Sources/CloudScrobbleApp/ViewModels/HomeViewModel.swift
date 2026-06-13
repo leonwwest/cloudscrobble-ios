@@ -323,6 +323,7 @@ final class HomeViewModel: ObservableObject {
             maxPlaylists: 4,
             maxTracksPerPlaylist: 10
         )
+        let lastFMTasteTracks = await session?.lastFMTasteTracks(api: api, maxTracks: 72) ?? []
 
         let seedTracks = Self.uniqueTracks(
             nextFeedTracks
@@ -331,6 +332,7 @@ final class HomeViewModel: ObservableObject {
                 + nextLikedTracks
                 + playlistTracks
                 + likedPlaylistTracks
+                + lastFMTasteTracks
         )
         let nextStationMixes = await stationMixes(from: seedTracks, api: api)
         let stationTracks = Self.uniqueTracks(nextStationMixes.flatMap(\.tracks))
@@ -365,6 +367,7 @@ final class HomeViewModel: ObservableObject {
             likedTracks: nextLikedTracks,
             playlistTracks: playlistTracks,
             likedPlaylistTracks: likedPlaylistTracks,
+            lastFMTasteTracks: lastFMTasteTracks,
             recommendedTracks: nextRecommended,
             username: nextMe?.username
         )
@@ -546,6 +549,7 @@ final class HomeViewModel: ObservableObject {
         likedTracks: [SCTrack],
         playlistTracks: [SCTrack] = [],
         likedPlaylistTracks: [SCTrack] = [],
+        lastFMTasteTracks: [SCTrack] = [],
         recommendedTracks: [SCTrack] = [],
         username: String?
     ) -> [HomeMix] {
@@ -553,6 +557,7 @@ final class HomeViewModel: ObservableObject {
         let weeklyWave = uniqueTracks(followingTracks + feedTracks)
         let personalPool = uniqueTracks(
             ownedTracks
+                + lastFMTasteTracks
                 + likedTracks
                 + playlistTracks
                 + likedPlaylistTracks
@@ -566,12 +571,31 @@ final class HomeViewModel: ObservableObject {
 
         var mixes: [HomeMix] = []
 
+        if !lastFMTasteTracks.isEmpty {
+            mixes.append(HomeMix(
+                id: "lastfm-taste",
+                title: "Last.fm Taste",
+                subtitle: "\(min(lastFMTasteTracks.count, 50)) Tracks aus Scrobbles und Top-Artists",
+                tracks: Array(lastFMTasteTracks.prefix(50)),
+                iconName: "music.note.list"
+            ))
+        }
+
         if !personalPool.isEmpty {
-            let shuffledTracks = Array(personalPool.shuffled().prefix(50))
+            let shuffledTracks = Array(weightedShuffleTracks(
+                lastFMTasteTracks: lastFMTasteTracks,
+                likedTracks: likedTracks,
+                ownedTracks: ownedTracks,
+                playlistTracks: playlistTracks,
+                likedPlaylistTracks: likedPlaylistTracks,
+                recommendedTracks: recommendedTracks,
+                feedTracks: feedTracks,
+                followingTracks: followingTracks
+            ).prefix(50))
             mixes.append(HomeMix(
                 id: "shuffle-feed",
                 title: "Shuffle Feed",
-                subtitle: "\(shuffledTracks.count) zufällige Tracks aus eigenen Songs, Likes und Start",
+                subtitle: "\(shuffledTracks.count) Tracks stark gewichtet nach Last.fm, Likes und Start",
                 tracks: shuffledTracks,
                 iconName: "shuffle"
             ))
@@ -608,7 +632,7 @@ final class HomeViewModel: ObservableObject {
                 mixes.append(HomeMix(
                     id: "mein-mix-\(index + 1)",
                     title: "Mein Mix \(index + 1)",
-                    subtitle: "\(tracks.count) Tracks aus Likes, Playlists und Start",
+                    subtitle: "\(tracks.count) Tracks aus Last.fm, Likes, Playlists und Start",
                     tracks: tracks,
                     iconName: index.isMultiple(of: 2) ? "sparkles" : "waveform"
                 ))
@@ -626,6 +650,34 @@ final class HomeViewModel: ObservableObject {
         }
 
         return mixes
+    }
+
+    private static func weightedShuffleTracks(
+        lastFMTasteTracks: [SCTrack],
+        likedTracks: [SCTrack],
+        ownedTracks: [SCTrack],
+        playlistTracks: [SCTrack],
+        likedPlaylistTracks: [SCTrack],
+        recommendedTracks: [SCTrack],
+        feedTracks: [SCTrack],
+        followingTracks: [SCTrack]
+    ) -> [SCTrack] {
+        let weightedTracks =
+            repeated(lastFMTasteTracks, times: 7)
+            + repeated(likedTracks, times: 3)
+            + repeated(ownedTracks, times: 2)
+            + repeated(playlistTracks, times: 2)
+            + repeated(likedPlaylistTracks, times: 2)
+            + recommendedTracks
+            + feedTracks
+            + followingTracks
+
+        return uniqueTracks(weightedTracks.shuffled())
+    }
+
+    private static func repeated(_ tracks: [SCTrack], times: Int) -> [SCTrack] {
+        guard times > 1 else { return tracks }
+        return (0..<times).flatMap { _ in tracks }
     }
 
     private static func uniqueTracks(_ tracks: [SCTrack]) -> [SCTrack] {

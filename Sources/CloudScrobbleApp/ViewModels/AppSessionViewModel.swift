@@ -35,10 +35,12 @@ final class AppSessionViewModel: ObservableObject {
 
     private let lastFMAuthService: LastFMAuthenticating?
     private let lastFMScrobbleService: LastFMScrobbleSending?
+    private let lastFMTasteService: LastFMTasteFetching?
     private var pendingSoundCloudAuthorization: PendingSoundCloudAuthorization?
     private var statusDismissalTask: Task<Void, Never>?
     private var queueFillTask: Task<Void, Never>?
     private var queueFillGeneration = UUID()
+    private var cachedLastFMTasteTracks: [SCTrack]?
     private var didAttemptPlaybackRestore = false
 
     init(config: AppConfig? = AppConfig.load()) {
@@ -70,18 +72,24 @@ final class AppSessionViewModel: ObservableObject {
                 authService: lastFMAuthService,
                 keychain: keychain
             )
+            let lastFMTasteService = LastFMProxyTasteService(
+                baseURL: config.tokenBrokerBaseURL,
+                authService: lastFMAuthService
+            )
 
             self.soundCloudAuthService = soundCloudAuthService
             self.realSoundCloudAPIClient = soundCloudAPIClient
             self.realPlaybackResolver = playbackResolver
             self.lastFMAuthService = lastFMAuthService
             self.lastFMScrobbleService = lastFMScrobbleService
+            self.lastFMTasteService = lastFMTasteService
         } else {
             self.soundCloudAuthService = nil
             self.realSoundCloudAPIClient = nil
             self.realPlaybackResolver = nil
             self.lastFMAuthService = nil
             self.lastFMScrobbleService = nil
+            self.lastFMTasteService = nil
             let missing = AppConfig.missingConfigurationKeys()
             if missing.isEmpty {
                 statusMessage = "Missing app configuration. Demo Mode can still be used without SoundCloud API."
@@ -130,6 +138,28 @@ final class AppSessionViewModel: ObservableObject {
     func pendingLastFMScrobbleCount() async -> Int {
         guard let lastFMScrobbleService else { return 0 }
         return await lastFMScrobbleService.pendingScrobbleCount()
+    }
+
+    func lastFMTasteProfile(limit: Int = 50) async -> LastFMTasteProfile? {
+        guard lastFMConnected, let lastFMTasteService else { return nil }
+        return try? await lastFMTasteService.tasteProfile(limit: limit)
+    }
+
+    func lastFMTasteTracks(api: SoundCloudAPIClienting, maxTracks: Int = 72) async -> [SCTrack] {
+        if let cachedLastFMTasteTracks {
+            return Array(cachedLastFMTasteTracks.prefix(maxTracks))
+        }
+
+        guard let profile = await lastFMTasteProfile(limit: 80) else {
+            return []
+        }
+        let tracks = await LastFMTasteTrackResolver.resolveTracks(
+            from: profile,
+            api: api,
+            maxTracks: max(maxTracks, 72)
+        )
+        cachedLastFMTasteTracks = tracks
+        return Array(tracks.prefix(maxTracks))
     }
 
     func resetConnections() async {
@@ -289,6 +319,7 @@ final class AppSessionViewModel: ObservableObject {
             try await lastFMScrobbleService.flushPendingScrobbles()
             let pending = await lastFMScrobbleService.pendingScrobbleCount()
             lastFMConnected = true
+            cachedLastFMTasteTracks = nil
             statusMessage = pending == 0 ? "Last.fm connected" : "Last.fm connected (\(pending) pending scrobbles)"
         } catch {
             statusMessage = "Last.fm login failed: \(error.localizedDescription)"
@@ -301,6 +332,7 @@ final class AppSessionViewModel: ObservableObject {
         }
         pendingSoundCloudAuthorization = nil
         cancelQueueFill()
+        cachedLastFMTasteTracks = nil
         playerController.clearSavedPlaybackSnapshot()
         deactivateSoundCloudMode()
     }
@@ -309,6 +341,7 @@ final class AppSessionViewModel: ObservableObject {
         guard let lastFMAuthService else { return }
         try? await lastFMAuthService.clearSession()
         lastFMConnected = false
+        cachedLastFMTasteTracks = nil
         playerController.setLastFMScrobbler(nil)
     }
 

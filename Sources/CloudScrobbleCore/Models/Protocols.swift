@@ -56,3 +56,7 @@ public protocol LastFMScrobbleSending: Sendable {
     func flushPendingScrobbles() async throws
     func pendingScrobbleCount() async -> Int
 }
+
+public protocol LastFMTasteFetching: Sendable {
+    func tasteProfile(limit: Int) async throws -> LastFMTasteProfile
+}

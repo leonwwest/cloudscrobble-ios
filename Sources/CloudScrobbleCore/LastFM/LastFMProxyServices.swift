@@ -227,6 +227,62 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
     }
 }
 
+public actor LastFMProxyTasteService: LastFMTasteFetching {
+    private let baseURL: URL
+    private let authService: LastFMAuthenticating
+    private let httpClient: HTTPClient
+
+    public init(
+        baseURL: URL,
+        authService: LastFMAuthenticating,
+        httpClient: HTTPClient = HTTPClient()
+    ) {
+        self.baseURL = baseURL
+        self.authService = authService
+        self.httpClient = httpClient
+    }
+
+    public func tasteProfile(limit: Int = 50) async throws -> LastFMTasteProfile {
+        guard let session = await authService.cachedSession() else {
+            throw CloudScrobbleError.lastFMError(code: 9, message: "Missing or invalid Last.fm session")
+        }
+
+        let endpoint = baseURL.appending(path: "lastfm/taste")
+        return try await postJSON(
+            to: endpoint,
+            body: LastFMTasteProxyRequest(
+                username: session.name,
+                limit: min(max(limit, 1), 100)
+            )
+        )
+    }
+
+    private func postJSON<RequestBody: Encodable, ResponseBody: Decodable>(
+        to url: URL,
+        body: RequestBody
+    ) async throws -> ResponseBody {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let data: Data
+        do {
+            data = try await httpClient.send(request).data
+        } catch CloudScrobbleError.httpStatus(_, let payload) {
+            guard let payload else { throw CloudScrobbleError.invalidResponse }
+            data = payload
+        }
+
+        if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: data) {
+            throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+        }
+
+        return try JSONDecoder().decode(ResponseBody.self, from: data)
+    }
+}
+
 private struct LastFMSessionResponse: Decodable {
     let session: LastFMSession
 }
@@ -257,4 +313,9 @@ private struct LastFMScrobbleProxyItem: Encodable {
     let artist: String
     let track: String
     let timestamp: Int
+}
+
+private struct LastFMTasteProxyRequest: Encodable {
+    let username: String
+    let limit: Int
 }

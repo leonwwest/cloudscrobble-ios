@@ -12,11 +12,12 @@ targets:
   CloudScrobbleiOS:
     type: application
     platform: iOS
+    productName: CloudScrobble
     deploymentTarget: "17.0"
     sources:
       - path: ../Sources/CloudScrobbleApp
-    resources:
       - path: CloudScrobbleiOS/Assets.xcassets
+        buildPhase: resources
     info:
       path: CloudScrobbleiOS/Info.plist
       properties:

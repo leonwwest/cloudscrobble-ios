@@ -8,6 +8,10 @@ Cloudflare Workers version of the SoundCloud token broker used by the iOS app.
 - `POST /oauth/soundcloud/exchange`
 - `POST /oauth/soundcloud/refresh`
 - `POST /oauth/soundcloud/client-credentials`
+- `POST /oauth/lastfm/mobile-session`
+- `POST /lastfm/now-playing`
+- `POST /lastfm/scrobble`
+- `POST /lastfm/taste`
 
 ## Setup
 
@@ -22,6 +26,8 @@ Set the SoundCloud credentials as encrypted Worker secrets:
 ```bash
 npx wrangler secret put SOUNDCLOUD_CLIENT_ID
 npx wrangler secret put SOUNDCLOUD_CLIENT_SECRET
+npx wrangler secret put LASTFM_API_KEY
+npx wrangler secret put LASTFM_API_SECRET
 ```
 
 Deploy:

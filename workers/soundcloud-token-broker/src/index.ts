@@ -39,6 +39,11 @@ interface LastFMScrobbleRequest {
   scrobbles?: LastFMScrobblePayload[];
 }
 
+interface LastFMTasteRequest {
+  username?: string;
+  limit?: number;
+}
+
 interface LastFMScrobblePayload {
   artist?: string;
   track?: string;
@@ -60,7 +65,7 @@ type RequestWithCF = Request & {
   };
 };
 
-const VERSION = "2026.06.12.3";
+const VERSION = "2026.06.13.1";
 const rateLimitBuckets = new Map<string, RateLimitBucket>();
 
 export default {
@@ -140,6 +145,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
 
     if (url.pathname === "/lastfm/scrobble") {
       return handleLastFMScrobble(request, env);
+    }
+
+    if (url.pathname === "/lastfm/taste") {
+      return handleLastFMTaste(request, env);
     }
 
     return json({ error: "not_found" }, 404);
@@ -333,6 +342,59 @@ async function handleLastFMScrobble(request: Request, env: Env): Promise<Respons
   return proxyLastFMRequest(cfg.value, params);
 }
 
+async function handleLastFMTaste(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return json({ error: "method_not_allowed" }, 405);
+  }
+
+  const cfg = loadLastFMConfig(env);
+  if (!cfg.ok) {
+    return json({ error: cfg.error }, 500);
+  }
+
+  const body = await parseJSON<LastFMTasteRequest>(request);
+  if (!body.ok) {
+    return json({ error: "invalid_json" }, 400);
+  }
+
+  const username = body.value.username?.trim();
+  if (!username) {
+    return json({ error: "missing_required_fields" }, 400);
+  }
+
+  const limit = clampLimit(body.value.limit, 50, 100);
+  const [recent, artists] = await Promise.all([
+    fetchLastFMJSON(cfg.value, {
+      method: "user.getRecentTracks",
+      user: username,
+      limit: String(limit),
+      extended: "0",
+      api_key: cfg.value.apiKey
+    }),
+    fetchLastFMJSON(cfg.value, {
+      method: "user.getTopArtists",
+      user: username,
+      period: "1month",
+      limit: String(Math.min(limit, 30)),
+      api_key: cfg.value.apiKey
+    })
+  ]);
+
+  if (!recent.ok) {
+    return json(recent.payload, recent.status);
+  }
+
+  if (!artists.ok) {
+    return json(artists.payload, artists.status);
+  }
+
+  return json({
+    username,
+    recentTracks: normalizeRecentTracks(recent.value).slice(0, limit),
+    topArtists: normalizeTopArtists(artists.value).slice(0, Math.min(limit, 30))
+  });
+}
+
 async function proxyTokenRequest(
   cfg: BrokerConfig,
   payload: URLSearchParams,
@@ -405,6 +467,75 @@ async function proxyLastFMRequest(cfg: LastFMConfig, params: Record<string, stri
     headers: {
       "Content-Type": "application/json"
     }
+  });
+}
+
+type LastFMJSONResult =
+  | { ok: true; value: unknown }
+  | { ok: false; status: number; payload: unknown };
+
+async function fetchLastFMJSON(cfg: LastFMConfig, params: Record<string, string>): Promise<LastFMJSONResult> {
+  const payload = new URLSearchParams({
+    ...params,
+    format: "json"
+  });
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(cfg.apiURL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: payload
+    });
+  } catch {
+    return { ok: false, status: 502, payload: { error: "upstream_unavailable" } };
+  }
+
+  const text = await upstream.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { ok: false, status: 502, payload: { error: "upstream_non_json" } };
+  }
+
+  if (!upstream.ok) {
+    return { ok: false, status: upstream.status, payload: value };
+  }
+
+  if (isLastFMError(value)) {
+    return { ok: false, status: 400, payload: value };
+  }
+
+  return { ok: true, value };
+}
+
+function normalizeRecentTracks(value: unknown): Array<{ artist: string; name: string }> {
+  const tracks = readArray(readRecord(readRecord(value).recenttracks).track);
+  return tracks.flatMap((raw) => {
+    const record = readRecord(raw);
+    const name = readString(record.name);
+    const artist = readString(readRecord(record.artist)["#text"]);
+    if (!artist || !name) {
+      return [];
+    }
+    return [{ artist, name }];
+  });
+}
+
+function normalizeTopArtists(value: unknown): Array<{ name: string; playcount: number }> {
+  const artists = readArray(readRecord(readRecord(value).topartists).artist);
+  return artists.flatMap((raw) => {
+    const record = readRecord(raw);
+    const name = readString(record.name);
+    const playcount = Number(readString(record.playcount) || 0);
+    if (!name) {
+      return [];
+    }
+    return [{ name, playcount: Number.isFinite(playcount) ? playcount : 0 }];
   });
 }
 
@@ -500,6 +631,35 @@ function json(payload: unknown, status = 200, headers: Record<string, string> = 
       ...headers
     }
   });
+}
+
+function clampLimit(value: number | undefined, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(1, Math.floor(value)));
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isLastFMError(value: unknown): boolean {
+  const record = readRecord(value);
+  return typeof record.error === "number"
+    || (typeof record.message === "string" && typeof record.error !== "undefined");
 }
 
 interface RateLimitConfig {

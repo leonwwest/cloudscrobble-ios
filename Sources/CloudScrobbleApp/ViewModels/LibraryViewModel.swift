@@ -96,14 +96,15 @@ final class LibraryViewModel: ObservableObject {
             let profile = try await meTask
             let tracksPage = try? await api.userTracks(urn: profile.urn, limit: 50, nextHref: nil)
             let ownedTracks = tracksPage?.collection ?? []
-            let libraryTracks = Self.uniqueTracks(ownedTracks + likedTracksPage.collection)
+            let lastFMTasteTracks = await session.lastFMTasteTracks(api: api, maxTracks: 72)
+            let libraryTracks = Self.uniqueTracks(lastFMTasteTracks + ownedTracks + likedTracksPage.collection)
 
             me = profile
             myTracks = ownedTracks
             myPlaylists = playlistsPage.collection
             myLikedTracks = likedTracksPage.collection
             myLikedPlaylists = likedPlaylistsPage.collection
-            smartMixes = Self.buildSmartMixes(from: libraryTracks)
+            smartMixes = Self.buildSmartMixes(from: libraryTracks, lastFMTasteTracks: lastFMTasteTracks)
             stationMixes = await buildRelatedStations(from: libraryTracks, api: api)
             persistCachedLibrary()
             errorMessage = nil
@@ -263,7 +264,7 @@ final class LibraryViewModel: ObservableObject {
         !myTracks.isEmpty || !myPlaylists.isEmpty || !myLikedTracks.isEmpty || !myLikedPlaylists.isEmpty || !stationMixes.isEmpty
     }
 
-    private static func buildSmartMixes(from tracks: [SCTrack]) -> [SmartMix] {
+    private static func buildSmartMixes(from tracks: [SCTrack], lastFMTasteTracks: [SCTrack] = []) -> [SmartMix] {
         let uniqueTracks = tracks.reduce(into: [SCTrack]()) { result, track in
             guard !result.contains(where: { $0.id == track.id }) else { return }
             result.append(track)
@@ -271,12 +272,29 @@ final class LibraryViewModel: ObservableObject {
 
         guard !uniqueTracks.isEmpty else { return [] }
 
-        let shuffledTracks = Array(uniqueTracks.shuffled().prefix(50))
-        var mixes: [SmartMix] = [
+        let shuffledTracks = Array(weightedShuffleTracks(
+            lastFMTasteTracks: lastFMTasteTracks,
+            libraryTracks: uniqueTracks
+        ).prefix(50))
+        var mixes: [SmartMix] = []
+
+        if !lastFMTasteTracks.isEmpty {
+            mixes.append(
+                SmartMix(
+                    id: "lastfm-taste",
+                    title: "Last.fm Taste",
+                    subtitle: "\(min(lastFMTasteTracks.count, 50)) Tracks aus Scrobbles und Top-Artists",
+                    tracks: Array(lastFMTasteTracks.prefix(50)),
+                    iconName: "music.note.list"
+                )
+            )
+        }
+
+        mixes.append(contentsOf: [
             SmartMix(
                 id: "library-shuffle",
                 title: "Likes Shuffle",
-                subtitle: "\(shuffledTracks.count) zufällige Tracks aus deinen Songs und Likes",
+                subtitle: "\(shuffledTracks.count) Tracks stark gewichtet nach Last.fm und Likes",
                 tracks: shuffledTracks,
                 iconName: "shuffle"
             ),
@@ -287,7 +305,7 @@ final class LibraryViewModel: ObservableObject {
                 tracks: Array(uniqueTracks.prefix(12)),
                 iconName: "sparkles"
             )
-        ]
+        ])
 
         let mixCount = min(4, max(1, uniqueTracks.count))
         for offset in 0..<mixCount {
@@ -304,6 +322,19 @@ final class LibraryViewModel: ObservableObject {
         }
 
         return mixes
+    }
+
+    private static func weightedShuffleTracks(
+        lastFMTasteTracks: [SCTrack],
+        libraryTracks: [SCTrack]
+    ) -> [SCTrack] {
+        let weightedTracks = repeated(lastFMTasteTracks, times: 7) + repeated(libraryTracks, times: 2)
+        return uniqueTracks(weightedTracks.shuffled())
+    }
+
+    private static func repeated(_ tracks: [SCTrack], times: Int) -> [SCTrack] {
+        guard times > 1 else { return tracks }
+        return (0..<times).flatMap { _ in tracks }
     }
 
     private func buildRelatedStations(from tracks: [SCTrack], api: SoundCloudAPIClienting) async -> [SmartMix] {
