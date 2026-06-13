@@ -4,11 +4,12 @@ import Foundation
 @MainActor
 final class LibraryViewModel: ObservableObject {
     private enum Storage {
-        static let cachedLibraryKey = "cloudscrobble.cachedLibrary.v1"
+        static let cachedLibraryKey = "cloudscrobble.cachedLibrary.v2"
     }
 
     private struct CachedLibrary: Codable {
         let me: SCUser?
+        let myTracks: [SCTrack]
         let myPlaylists: [SCPlaylist]
         let myLikedTracks: [SCTrack]
         let myLikedPlaylists: [SCPlaylist]
@@ -34,6 +35,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     @Published private(set) var me: SCUser?
+    @Published private(set) var myTracks: [SCTrack] = []
     @Published private(set) var myPlaylists: [SCPlaylist] = []
     @Published private(set) var myLikedTracks: [SCTrack] = []
     @Published private(set) var myLikedPlaylists: [SCPlaylist] = []
@@ -66,6 +68,7 @@ final class LibraryViewModel: ObservableObject {
         }
         if session.soundCloudPublicMode && !session.soundCloudMockMode {
             me = nil
+            myTracks = []
             myPlaylists = []
             myLikedTracks = []
             myLikedPlaylists = []
@@ -90,12 +93,18 @@ final class LibraryViewModel: ObservableObject {
             let likedTracksPage = try await likedTracksTask
             let likedPlaylistsPage = try await likedPlaylistsTask
 
-            me = try await meTask
+            let profile = try await meTask
+            let tracksPage = try? await api.userTracks(urn: profile.urn, limit: 50, nextHref: nil)
+            let ownedTracks = tracksPage?.collection ?? []
+            let libraryTracks = Self.uniqueTracks(ownedTracks + likedTracksPage.collection)
+
+            me = profile
+            myTracks = ownedTracks
             myPlaylists = playlistsPage.collection
             myLikedTracks = likedTracksPage.collection
             myLikedPlaylists = likedPlaylistsPage.collection
-            smartMixes = Self.buildSmartMixes(from: likedTracksPage.collection)
-            stationMixes = await buildRelatedStations(from: likedTracksPage.collection, api: api)
+            smartMixes = Self.buildSmartMixes(from: libraryTracks)
+            stationMixes = await buildRelatedStations(from: libraryTracks, api: api)
             persistCachedLibrary()
             errorMessage = nil
         } catch {
@@ -256,7 +265,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private var hasLibraryContent: Bool {
-        !myPlaylists.isEmpty || !myLikedTracks.isEmpty || !myLikedPlaylists.isEmpty || !stationMixes.isEmpty
+        !myTracks.isEmpty || !myPlaylists.isEmpty || !myLikedTracks.isEmpty || !myLikedPlaylists.isEmpty || !stationMixes.isEmpty
     }
 
     private static func buildSmartMixes(from tracks: [SCTrack]) -> [SmartMix] {
@@ -267,7 +276,15 @@ final class LibraryViewModel: ObservableObject {
 
         guard !uniqueTracks.isEmpty else { return [] }
 
+        let shuffledTracks = Array(uniqueTracks.shuffled().prefix(50))
         var mixes: [SmartMix] = [
+            SmartMix(
+                id: "library-shuffle",
+                title: "Likes Shuffle",
+                subtitle: "\(shuffledTracks.count) zufällige Tracks aus deinen Songs und Likes",
+                tracks: shuffledTracks,
+                iconName: "shuffle"
+            ),
             SmartMix(
                 id: "daily-drops",
                 title: "Daily Drops",
@@ -360,16 +377,19 @@ final class LibraryViewModel: ObservableObject {
         }
 
         me = cached.me
+        myTracks = cached.myTracks
         myPlaylists = cached.myPlaylists
         myLikedTracks = cached.myLikedTracks
         myLikedPlaylists = cached.myLikedPlaylists
-        smartMixes = Self.buildSmartMixes(from: cached.myLikedTracks)
-        stationMixes = Self.buildFallbackStations(from: cached.myLikedTracks)
+        let libraryTracks = Self.uniqueTracks(cached.myTracks + cached.myLikedTracks)
+        smartMixes = Self.buildSmartMixes(from: libraryTracks)
+        stationMixes = Self.buildFallbackStations(from: libraryTracks)
     }
 
     private func persistCachedLibrary() {
         let cached = CachedLibrary(
             me: me,
+            myTracks: myTracks,
             myPlaylists: myPlaylists,
             myLikedTracks: myLikedTracks,
             myLikedPlaylists: myLikedPlaylists
