@@ -25,7 +25,7 @@ struct ContentView: View {
                 CloudBackdrop()
 
                 VStack(spacing: 0) {
-                    connectionDeck
+                    compactConnectionHeader
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                         .opacity(deckVisible ? 1 : 0)
@@ -57,7 +57,7 @@ struct ContentView: View {
                 if let statusMessage = session.statusMessage {
                     statusToast(message: statusMessage)
                         .padding(.horizontal, 16)
-                        .padding(.top, 92)
+                        .padding(.top, 72)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .onTapGesture {
@@ -101,8 +101,8 @@ struct ContentView: View {
         }
     }
 
-    private var connectionDeck: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var compactConnectionHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("CloudScrobble")
@@ -138,25 +138,10 @@ struct ContentView: View {
                 Spacer(minLength: 0)
             }
 
-            if session.soundCloudConnected && session.soundCloudPublicMode {
-                Text("Public Mode active: search/playback enabled, private /me endpoints disabled.")
-                    .font(.system(.caption2, design: .serif))
-                    .foregroundStyle(CloudTheme.muted)
-            }
-
-            if session.soundCloudConnected && session.soundCloudMockMode {
-                Text("Demo Mode active: mock catalog only. Connect SoundCloud or Public Mode for real audio.")
-                    .font(.system(.caption2, design: .serif))
-                    .foregroundStyle(CloudTheme.muted)
-            }
-
-            connectionActions
-
-            if !session.isConfigured {
-                Text("Set app config values and start backend at `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.")
-                    .font(.system(.caption2, design: .serif))
-                    .foregroundStyle(CloudTheme.warning)
-                    .lineLimit(2)
+            if session.isBusy {
+                ProgressView(value: 0.72)
+                    .progressViewStyle(.linear)
+                    .tint(CloudTheme.sky)
             }
         }
         .cloudCard()
@@ -285,6 +270,35 @@ struct ContentView: View {
                         SettingsInfoRow(title: "Pending scrobbles", value: "\(pendingLastFMScrobbles)")
                         SettingsInfoRow(title: "Worker", value: session.tokenBrokerDisplayURL)
                     }
+                    .cloudCard()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Connections")
+                            .font(.system(.headline, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.ink)
+
+                        connectionActions
+
+                        if session.soundCloudConnected && session.soundCloudPublicMode {
+                            Text("Public Mode active: search/playback enabled, private /me endpoints disabled.")
+                                .font(.system(.caption2, design: .serif))
+                                .foregroundStyle(CloudTheme.muted)
+                        }
+
+                        if session.soundCloudConnected && session.soundCloudMockMode {
+                            Text("Demo Mode active: mock catalog only. Connect SoundCloud or Public Mode for real audio.")
+                                .font(.system(.caption2, design: .serif))
+                                .foregroundStyle(CloudTheme.muted)
+                        }
+
+                        if !session.isConfigured {
+                            Text("Set app config values and start backend at `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.")
+                                .font(.system(.caption2, design: .serif))
+                                .foregroundStyle(CloudTheme.warning)
+                                .lineLimit(2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 10) {
