@@ -9,6 +9,7 @@ struct LibraryView: View {
         case overview = "Übersicht"
         case likes = "Likes"
         case playlists = "Playlists"
+        case stations = "Sender"
         case history = "Verlauf"
 
         var id: String { rawValue }
@@ -39,6 +40,17 @@ struct LibraryView: View {
             set: { value in
                 if value == nil {
                     viewModel.clearPlaylistSelection()
+                }
+            }
+        )
+    }
+
+    private var selectedMixBinding: Binding<LibraryViewModel.SmartMix?> {
+        Binding(
+            get: { viewModel.selectedMix },
+            set: { value in
+                if value == nil {
+                    viewModel.clearMixSelection()
                 }
             }
         )
@@ -109,6 +121,32 @@ struct LibraryView: View {
                 }
             )
         }
+        .sheet(item: selectedMixBinding) { mix in
+            LibraryMixTracksSheet(
+                mix: mix,
+                onClose: {
+                    viewModel.clearMixSelection()
+                },
+                onPlayAll: {
+                    Task {
+                        await viewModel.playSelectedMix()
+                        await MainActor.run { viewModel.clearMixSelection() }
+                    }
+                },
+                onPlayTrack: { track in
+                    Task {
+                        await viewModel.playSelectedMix(startingWith: track)
+                        await MainActor.run { viewModel.clearMixSelection() }
+                    }
+                },
+                onPlayNextTrack: { track in
+                    Task { await viewModel.playNext(track: track) }
+                },
+                onAddToQueueTrack: { track in
+                    Task { await viewModel.addToQueue(track: track) }
+                }
+            )
+        }
     }
 
     private var hasLibraryContent: Bool {
@@ -116,6 +154,7 @@ struct LibraryView: View {
             || !viewModel.myPlaylists.isEmpty
             || !viewModel.myLikedTracks.isEmpty
             || !viewModel.myLikedPlaylists.isEmpty
+            || !viewModel.stationMixes.isEmpty
             || !playerController.recentlyPlayed.isEmpty
     }
 
@@ -153,6 +192,7 @@ struct LibraryView: View {
         case .overview:
             recentSection
             smartMixSection
+            stationSection
             playlistShelf(
                 title: "Playlists",
                 icon: "music.note.list",
@@ -181,6 +221,8 @@ struct LibraryView: View {
                 playlists: viewModel.myLikedPlaylists,
                 emptyText: "No liked playlists"
             )
+        case .stations:
+            stationSection
         case .history:
             recentSection
         }
@@ -217,6 +259,8 @@ struct LibraryView: View {
                 LazyHStack(spacing: 12) {
                     ForEach(viewModel.smartMixes) { mix in
                         SmartMixCard(mix: mix) {
+                            viewModel.open(mix: mix)
+                        } onPlay: {
                             Task { await viewModel.play(mix: mix) }
                         }
                     }
@@ -224,6 +268,29 @@ struct LibraryView: View {
                 .padding(.horizontal, 1)
             }
             .scrollIndicators(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private var stationSection: some View {
+        if !viewModel.stationMixes.isEmpty {
+            LibrarySectionHeader(title: "Sender", icon: "dot.radiowaves.left.and.right")
+
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 12) {
+                    ForEach(viewModel.stationMixes) { mix in
+                        SmartMixCard(mix: mix) {
+                            viewModel.open(mix: mix)
+                        } onPlay: {
+                            Task { await viewModel.play(mix: mix) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollIndicators(.hidden)
+        } else if scope == .stations {
+            LibraryEmptyRow(text: "No stations yet")
         }
     }
 
@@ -395,34 +462,49 @@ private struct LibraryEmptyRow: View {
 
 private struct SmartMixCard: View {
     let mix: LibraryViewModel.SmartMix
+    let onOpen: () -> Void
     let onPlay: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            ArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
-                .frame(width: 148, height: 148)
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 9) {
+                    ArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
+                        .frame(width: 148, height: 148)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(mix.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.black))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(1)
-                Text(mix.subtitle)
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(2)
-                    .frame(height: 30, alignment: .top)
-            }
-
-            Button(action: onPlay) {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(CloudTheme.sky))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(mix.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(1)
+                        Text(mix.subtitle)
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(2)
+                            .frame(height: 30, alignment: .top)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play \(mix.title)")
+            .accessibilityLabel("Open \(mix.title)")
+
+            HStack(spacing: 8) {
+                Button(action: onOpen) {
+                    Label("Tracks", systemImage: "list.bullet")
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .accessibilityLabel("Show \(mix.title) tracks")
+
+                Button(action: onPlay) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.sky))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play \(mix.title)")
+            }
         }
         .padding(10)
         .frame(width: 170, alignment: .leading)
@@ -445,25 +527,33 @@ private struct LibraryPlaylistCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Button(action: onOpen) {
-                ArtworkTile(url: playlist.artworkURL, iconName: "music.note.list")
-                    .frame(width: 148, height: 148)
+                VStack(alignment: .leading, spacing: 9) {
+                    ArtworkTile(url: playlist.artworkURL, iconName: "music.note.list")
+                        .frame(width: 148, height: 148)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(playlist.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(2)
+                            .frame(height: 38, alignment: .top)
+                        Text(playlist.user.username)
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(playlist.title)")
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(playlist.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.black))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(2)
-                    .frame(height: 38, alignment: .top)
-                Text(playlist.user.username)
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(1)
-            }
-
             HStack(spacing: 8) {
+                Button(action: onOpen) {
+                    Label("Tracks", systemImage: "list.bullet")
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .accessibilityLabel("Show \(playlist.title) tracks")
+
                 Button(action: onPlay) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 13, weight: .bold))
@@ -473,16 +563,6 @@ private struct LibraryPlaylistCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play \(playlist.title)")
-
-                Button(action: onOpen) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CloudTheme.ink)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(CloudTheme.elevatedStrong))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(playlist.title)")
             }
         }
         .padding(10)
@@ -698,6 +778,78 @@ private struct LibraryPlaylistTracksSheet: View {
                 .cloudCard()
 
                 ForEach(tracks) { track in
+                    LibraryTrackRow(track: track) {
+                        onPlayTrack(track)
+                    } onPlayNext: {
+                        onPlayNextTrack(track)
+                    } onAddToQueue: {
+                        onAddToQueueTrack(track)
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(CloudBackdrop())
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct LibraryMixTracksSheet: View {
+    let mix: LibraryViewModel.SmartMix
+    let onClose: () -> Void
+    let onPlayAll: () -> Void
+    let onPlayTrack: (SCTrack) -> Void
+    let onPlayNextTrack: (SCTrack) -> Void
+    let onAddToQueueTrack: (SCTrack) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    ArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
+                        .frame(width: 74, height: 74)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mix.title)
+                            .font(.system(.title3, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(2)
+                        Text("\(mix.tracks.count) tracks")
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                        Text(mix.subtitle)
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    HStack(spacing: 8) {
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(CloudTheme.ink)
+                                .frame(width: 38, height: 38)
+                                .background(Circle().fill(CloudTheme.elevatedStrong))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close collection")
+
+                        Button(action: onPlayAll) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 46, height: 46)
+                                .background(Circle().fill(CloudTheme.sky))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Play \(mix.title)")
+                    }
+                }
+                .cloudCard()
+
+                ForEach(mix.tracks) { track in
                     LibraryTrackRow(track: track) {
                         onPlayTrack(track)
                     } onPlayNext: {

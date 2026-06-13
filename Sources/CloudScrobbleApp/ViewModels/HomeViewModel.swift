@@ -44,7 +44,9 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var likedTracks: [SCTrack] = []
     @Published private(set) var likedPlaylists: [SCPlaylist] = []
     @Published private(set) var homeMixes: [HomeMix] = []
+    @Published private(set) var stationMixes: [HomeMix] = []
     @Published private(set) var selectedPlaylist: PlaylistTracksData?
+    @Published private(set) var selectedMix: HomeMix?
     @Published private(set) var isLoading = false
     @Published private(set) var isLoadingPlaylist = false
     @Published private(set) var message: String?
@@ -118,7 +120,13 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        await session.play(tracks: mix.tracks, startAt: 0, maxQueueLength: 40)
+        await session.playPlaylist(tracks: mix.tracks, startAt: 0)
+    }
+
+    func open(mix: HomeMix) {
+        selectedPlaylist = nil
+        selectedMix = mix
+        message = nil
     }
 
     func play(savedTrack: SavedPlaybackTrack) async {
@@ -141,6 +149,7 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let tracks = try await session.loadPlaylistTracks(for: playlist)
+            selectedMix = nil
             selectedPlaylist = PlaylistTracksData(playlist: playlist, tracks: tracks)
             message = nil
         } catch {
@@ -193,8 +202,35 @@ final class HomeViewModel: ObservableObject {
         await session.playPlaylist(tracks: selectedPlaylist.tracks, startAt: startIndex)
     }
 
+    func playSelectedMix() async {
+        guard let selectedMix else {
+            message = "No mix selected"
+            return
+        }
+
+        await play(mix: selectedMix)
+    }
+
+    func playSelectedMix(startingWith track: SCTrack) async {
+        guard let session else {
+            message = "App session unavailable"
+            return
+        }
+        guard let selectedMix else {
+            await session.play(track: track)
+            return
+        }
+
+        let startIndex = selectedMix.tracks.firstIndex(where: { $0.id == track.id }) ?? 0
+        await session.playPlaylist(tracks: selectedMix.tracks, startAt: startIndex)
+    }
+
     func clearPlaylistSelection() {
         selectedPlaylist = nil
+    }
+
+    func clearMixSelection() {
+        selectedMix = nil
     }
 
     private var hasHomeContent: Bool {
@@ -205,6 +241,7 @@ final class HomeViewModel: ObservableObject {
             || !likedTracks.isEmpty
             || !likedPlaylists.isEmpty
             || !homeMixes.isEmpty
+            || !stationMixes.isEmpty
     }
 
     private func loadPersonalStart(api: SoundCloudAPIClienting) async {
@@ -292,6 +329,7 @@ final class HomeViewModel: ObservableObject {
             api: api,
             username: nextMe?.username
         )
+        let nextStationMixes = Self.buildStationMixes(from: relatedMixes, fallbackTracks: seedTracks)
         let relatedTracks = Self.uniqueTracks(relatedMixes.flatMap(\.tracks))
         let discoveryTracks = await discoveryFallbackTracks(
             api: api,
@@ -315,6 +353,7 @@ final class HomeViewModel: ObservableObject {
         homePlaylists = nextHomePlaylists
         likedTracks = nextLikedTracks
         likedPlaylists = nextLikedPlaylists
+        stationMixes = nextStationMixes
         homeMixes = Self.buildHomeMixes(
             feedTracks: nextFeedTracks,
             followingTracks: nextFollowingTracks,
@@ -323,6 +362,7 @@ final class HomeViewModel: ObservableObject {
             username: nextMe?.username
         )
         selectedPlaylist = nil
+        selectedMix = nil
         persistCachedHome()
 
         if errors.isEmpty {
@@ -355,7 +395,9 @@ final class HomeViewModel: ObservableObject {
                 relatedMixes: [],
                 username: nil
             )
+            stationMixes = Self.buildFallbackStationMixes(from: tracks)
             selectedPlaylist = nil
+            selectedMix = nil
             message = "Full SoundCloud login is needed for your personal Start. Showing public discovery."
         } catch {
             message = "Public Start loading failed: \(error.localizedDescription)"
@@ -412,6 +454,40 @@ final class HomeViewModel: ObservableObject {
         }
 
         return mixes
+    }
+
+    private static func buildStationMixes(from relatedMixes: [HomeMix], fallbackTracks: [SCTrack]) -> [HomeMix] {
+        let stations = relatedMixes.prefix(5).enumerated().map { index, mix in
+            HomeMix(
+                id: "sender-\(mix.id)",
+                title: "Sender \(index + 1)",
+                subtitle: mix.subtitle.replacingOccurrences(of: "ähnliche Tracks", with: "Radio-Tracks"),
+                tracks: mix.tracks,
+                iconName: "dot.radiowaves.left.and.right"
+            )
+        }
+
+        if !stations.isEmpty {
+            return stations
+        }
+
+        return buildFallbackStationMixes(from: fallbackTracks)
+    }
+
+    private static func buildFallbackStationMixes(from tracks: [SCTrack]) -> [HomeMix] {
+        let dedupedTracks = uniqueTracks(tracks)
+        guard !dedupedTracks.isEmpty else { return [] }
+
+        return dedupedTracks.prefix(4).enumerated().map { index, seed in
+            let rotated = Array(dedupedTracks.dropFirst(index)) + Array(dedupedTracks.prefix(index))
+            return HomeMix(
+                id: "sender-fallback-\(seed.id)",
+                title: "\(seed.user.username) Sender",
+                subtitle: "Radio aus \(seed.title)",
+                tracks: Array(rotated.prefix(20)),
+                iconName: "dot.radiowaves.left.and.right"
+            )
+        }
     }
 
     private func discoveryFallbackTracks(
@@ -565,6 +641,9 @@ final class HomeViewModel: ObservableObject {
             likedTracks: cached.likedTracks,
             relatedMixes: [],
             username: cached.me?.username
+        )
+        stationMixes = Self.buildFallbackStationMixes(
+            from: cached.feedTracks + cached.followingTracks + cached.likedTracks
         )
     }
 

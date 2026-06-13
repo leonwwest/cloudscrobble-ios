@@ -57,6 +57,11 @@ struct SearchView: View {
                 Task { await viewModel.playNext(track: track) }
             }, onAddToQueueTrack: { track in
                 Task { await viewModel.addToQueue(track: track) }
+            }, onOpenPlaylist: { playlist in
+                Task {
+                    await MainActor.run { viewModel.closeUserProfile() }
+                    await viewModel.open(playlist: playlist)
+                }
             })
         }
         .sheet(isPresented: Binding(
@@ -330,35 +335,41 @@ private struct PlaylistResultCard: View {
     let onOpen: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "music.note.list")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(CloudTheme.sky)
-                .frame(width: 42, height: 42)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(CloudTheme.sky.opacity(0.15))
-                )
+        Button(action: { onOpen?() }) {
+            HStack(spacing: 12) {
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(CloudTheme.sky)
+                    .frame(width: 42, height: 42)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(CloudTheme.sky.opacity(0.15))
+                    )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(playlist.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(2)
-                Text(playlist.user.username)
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-            }
-
-            Spacer()
-
-            if let onOpen {
-                Button(action: onOpen) {
-                    Label("Open", systemImage: "chevron.right")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playlist.title)
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .lineLimit(2)
+                    Text(playlist.user.username)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
                 }
-                    .buttonStyle(SecondaryPillButtonStyle())
+
+                Spacer()
+
+                if onOpen != nil {
+                    Label("Open", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(CloudTheme.elevatedStrong))
+                }
             }
         }
+        .buttonStyle(.plain)
+        .disabled(onOpen == nil)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
@@ -425,6 +436,7 @@ private struct UserProfileSheet: View {
     let onPlayTrack: (SCTrack) -> Void
     let onPlayNextTrack: (SCTrack) -> Void
     let onAddToQueueTrack: (SCTrack) -> Void
+    let onOpenPlaylist: (SCPlaylist) -> Void
 
     var body: some View {
         ScrollView {
@@ -456,7 +468,9 @@ private struct UserProfileSheet: View {
                     .font(.system(.headline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                 ForEach(profile.playlists.prefix(20)) { playlist in
-                    PlaylistResultCard(playlist: playlist, onOpen: nil)
+                    PlaylistResultCard(playlist: playlist) {
+                        onOpenPlaylist(playlist)
+                    }
                 }
             }
             .padding()

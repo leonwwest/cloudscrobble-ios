@@ -34,6 +34,17 @@ struct HomeView: View {
         )
     }
 
+    private var selectedMixBinding: Binding<HomeViewModel.HomeMix?> {
+        Binding(
+            get: { viewModel.selectedMix },
+            set: { value in
+                if value == nil {
+                    viewModel.clearMixSelection()
+                }
+            }
+        )
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
@@ -59,6 +70,8 @@ struct HomeView: View {
                 } else {
                     if let featuredMix = viewModel.homeMixes.first {
                         HomeFeatureCard(mix: featuredMix) {
+                            viewModel.open(mix: featuredMix)
+                        } onPlay: {
                             Task { await viewModel.play(mix: featuredMix) }
                         }
                     }
@@ -69,7 +82,17 @@ struct HomeView: View {
                         tracks: viewModel.feedTracks
                     )
 
-                    mixShelf(mixes: Array(viewModel.homeMixes.dropFirst()))
+                    mixShelf(
+                        title: "Für dich abgemischt",
+                        icon: "waveform",
+                        mixes: Array(viewModel.homeMixes.dropFirst())
+                    )
+
+                    mixShelf(
+                        title: "Sender",
+                        icon: "dot.radiowaves.left.and.right",
+                        mixes: viewModel.stationMixes
+                    )
 
                     trackShelf(
                         title: "Aus deinem Feed",
@@ -135,6 +158,32 @@ struct HomeView: View {
                 }
             )
         }
+        .sheet(item: selectedMixBinding) { mix in
+            HomeMixTracksSheet(
+                mix: mix,
+                onClose: {
+                    viewModel.clearMixSelection()
+                },
+                onPlayAll: {
+                    Task {
+                        await viewModel.playSelectedMix()
+                        await MainActor.run { viewModel.clearMixSelection() }
+                    }
+                },
+                onPlayTrack: { track in
+                    Task {
+                        await viewModel.playSelectedMix(startingWith: track)
+                        await MainActor.run { viewModel.clearMixSelection() }
+                    }
+                },
+                onPlayNextTrack: { track in
+                    Task { await viewModel.playNext(track: track) }
+                },
+                onAddToQueueTrack: { track in
+                    Task { await viewModel.addToQueue(track: track) }
+                }
+            )
+        }
     }
 
     private var hasHomeContent: Bool {
@@ -144,6 +193,7 @@ struct HomeView: View {
             || !viewModel.likedTracks.isEmpty
             || !viewModel.likedPlaylists.isEmpty
             || !viewModel.homeMixes.isEmpty
+            || !viewModel.stationMixes.isEmpty
             || !playerController.recentlyPlayed.isEmpty
     }
 
@@ -173,15 +223,17 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func mixShelf(mixes: [HomeViewModel.HomeMix]) -> some View {
+    private func mixShelf(title: String, icon: String, mixes: [HomeViewModel.HomeMix]) -> some View {
         if !mixes.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                HomeSectionHeader(title: "Für dich abgemischt", icon: "waveform")
+                HomeSectionHeader(title: title, icon: icon)
 
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 12) {
                         ForEach(mixes) { mix in
                             HomeMixCard(mix: mix) {
+                                viewModel.open(mix: mix)
+                            } onPlay: {
                                 Task { await viewModel.play(mix: mix) }
                             }
                         }
@@ -314,28 +366,35 @@ private struct HomeMessageBanner: View {
 
 private struct HomeFeatureCard: View {
     let mix: HomeViewModel.HomeMix
+    let onOpen: () -> Void
     let onPlay: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
-            HomeArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
-                .frame(width: 112, height: 112)
+            Button(action: onOpen) {
+                HStack(spacing: 14) {
+                    HomeArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
+                        .frame(width: 112, height: 112)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(mix.title)
-                    .font(.system(.title3, design: .rounded).weight(.black))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                Text(mix.subtitle)
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(2)
-                Text("\(mix.tracks.count) tracks")
-                    .font(.system(.caption2, design: .rounded).weight(.bold))
-                    .foregroundStyle(CloudTheme.sky)
-                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(mix.title)
+                            .font(.system(.title3, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        Text(mix.subtitle)
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(2)
+                        Text("\(mix.tracks.count) tracks")
+                            .font(.system(.caption2, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.sky)
+                            .lineLimit(1)
+                    }
+                }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(mix.title)")
 
             Spacer(minLength: 4)
 
@@ -460,44 +519,59 @@ private struct HomeTrackCard: View {
 
 private struct HomeMixCard: View {
     let mix: HomeViewModel.HomeMix
+    let onOpen: () -> Void
     let onPlay: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            ZStack(alignment: .bottomLeading) {
-                HomeArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
-                    .frame(width: 150, height: 150)
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 9) {
+                    ZStack(alignment: .bottomLeading) {
+                        HomeArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
+                            .frame(width: 150, height: 150)
 
-                Text(mix.title)
-                    .font(.system(.title3, design: .rounded).weight(.black))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.68)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .frame(maxWidth: 132, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(CloudTheme.sky.opacity(0.94))
-                    )
-                    .padding(8)
-            }
+                        Text(mix.title)
+                            .font(.system(.title3, design: .rounded).weight(.black))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.68)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .frame(maxWidth: 132, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(CloudTheme.sky.opacity(0.94))
+                            )
+                            .padding(8)
+                    }
 
-            Text(mix.subtitle)
-                .font(.system(.caption2, design: .rounded).weight(.semibold))
-                .foregroundStyle(CloudTheme.muted)
-                .lineLimit(2)
-                .frame(height: 30, alignment: .top)
-
-            Button(action: onPlay) {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(CloudTheme.sky))
+                    Text(mix.subtitle)
+                        .font(.system(.caption2, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(2)
+                        .frame(height: 30, alignment: .top)
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play \(mix.title)")
+            .accessibilityLabel("Open \(mix.title)")
+
+            HStack(spacing: 8) {
+                Button(action: onOpen) {
+                    Label("Tracks", systemImage: "list.bullet")
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .accessibilityLabel("Show \(mix.title) tracks")
+
+                Button(action: onPlay) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(CloudTheme.sky))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play \(mix.title)")
+            }
         }
         .padding(10)
         .frame(width: 172, alignment: .leading)
@@ -670,6 +744,78 @@ private struct HomePlaylistTracksSheet: View {
                 .cloudCard()
 
                 ForEach(tracks) { track in
+                    HomeSheetTrackRow(track: track) {
+                        onPlayTrack(track)
+                    } onPlayNext: {
+                        onPlayNextTrack(track)
+                    } onAddToQueue: {
+                        onAddToQueueTrack(track)
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(CloudBackdrop())
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct HomeMixTracksSheet: View {
+    let mix: HomeViewModel.HomeMix
+    let onClose: () -> Void
+    let onPlayAll: () -> Void
+    let onPlayTrack: (SCTrack) -> Void
+    let onPlayNextTrack: (SCTrack) -> Void
+    let onAddToQueueTrack: (SCTrack) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    HomeArtworkMosaic(urls: mix.artworkURLs, iconName: mix.iconName)
+                        .frame(width: 74, height: 74)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mix.title)
+                            .font(.system(.title3, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(2)
+                        Text("\(mix.tracks.count) tracks")
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                        Text(mix.subtitle)
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    HStack(spacing: 8) {
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(CloudTheme.ink)
+                                .frame(width: 38, height: 38)
+                                .background(Circle().fill(CloudTheme.elevatedStrong))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close collection")
+
+                        Button(action: onPlayAll) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 46, height: 46)
+                                .background(Circle().fill(CloudTheme.sky))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Play \(mix.title)")
+                    }
+                }
+                .cloudCard()
+
+                ForEach(mix.tracks) { track in
                     HomeSheetTrackRow(track: track) {
                         onPlayTrack(track)
                     } onPlayNext: {
