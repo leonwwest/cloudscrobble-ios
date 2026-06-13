@@ -2,7 +2,8 @@ import Foundation
 
 public enum MetadataMapper {
     public static func mapLastFM(track: SCTrack) -> LastFMTrackMeta {
-        if let artist = nonEmpty(track.publisherMetadata?.artist),
+        let publisherArtist = nonEmpty(track.publisherMetadata?.artist)
+        if let artist = publisherArtist,
            let releaseTitle = nonEmpty(track.publisherMetadata?.releaseTitle) {
             return LastFMTrackMeta(artist: artist, track: sanitize(title: releaseTitle))
         }
@@ -12,6 +13,10 @@ public enum MetadataMapper {
             return LastFMTrackMeta(artist: pair.artist, track: pair.track)
         }
 
+        if let publisherArtist {
+            return LastFMTrackMeta(artist: publisherArtist, track: title)
+        }
+
         return LastFMTrackMeta(artist: track.user.username, track: title)
     }
 
@@ -19,10 +24,13 @@ public enum MetadataMapper {
         let separators = [" - ", " – ", " — "]
 
         for separator in separators {
-            let parts = title.components(separatedBy: separator)
-            if parts.count == 2,
-               let artist = nonEmpty(parts[0]),
-               let track = nonEmpty(parts[1]) {
+            guard let range = title.range(of: separator) else { continue }
+
+            let artistPart = String(title[..<range.lowerBound])
+            let trackPart = String(title[range.upperBound...])
+
+            if let artist = nonEmpty(artistPart),
+               let track = nonEmpty(trackPart) {
                 return (artist, track)
             }
         }
