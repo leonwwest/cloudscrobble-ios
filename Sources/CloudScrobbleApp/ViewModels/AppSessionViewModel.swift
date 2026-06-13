@@ -410,7 +410,7 @@ final class AppSessionViewModel: ObservableObject {
         }
     }
 
-    func loadPlaylistTracks(for playlist: SCPlaylist, maximumTracks: Int = 1_000) async throws -> [SCTrack] {
+    func loadPlaylistTracks(for playlist: SCPlaylist, maximumTracks: Int = .max) async throws -> [SCTrack] {
         guard let api = apiClient else {
             throw CloudScrobbleError.invalidConfiguration("Connect SoundCloud first")
         }
@@ -441,18 +441,16 @@ final class AppSessionViewModel: ObservableObject {
             api: api,
             maximumTracks: cappedMaximum
         )
-        let uniqueEndpointTracks = uniquePlaylistTracks(endpointTracks)
 
-        if compactEntries.count > uniqueEndpointTracks.count || uniqueEndpointTracks.isEmpty {
+        if compactEntries.count > endpointTracks.count || endpointTracks.isEmpty {
             let detailedTracks = await detailedTracks(from: compactEntries, api: api)
-            let uniqueDetailedTracks = uniquePlaylistTracks(detailedTracks)
-            if !uniqueDetailedTracks.isEmpty {
-                return uniqueDetailedTracks
+            if !detailedTracks.isEmpty {
+                return detailedTracks
             }
         }
 
-        if !uniqueEndpointTracks.isEmpty {
-            return uniqueEndpointTracks
+        if !endpointTracks.isEmpty {
+            return endpointTracks
         }
 
         if let endpointError {
@@ -531,13 +529,6 @@ final class AppSessionViewModel: ObservableObject {
         let lowerBound = clampedStart < queueLimit ? 0 : clampedStart
         let upperBound = min(tracks.count, lowerBound + queueLimit)
         return (Array(tracks[lowerBound..<upperBound]), clampedStart - lowerBound)
-    }
-
-    private func uniquePlaylistTracks(_ tracks: [SCTrack]) -> [SCTrack] {
-        var seen = Set<String>()
-        return tracks.filter { track in
-            seen.insert(track.id).inserted
-        }
     }
 
     private func playlistTrackEntries(

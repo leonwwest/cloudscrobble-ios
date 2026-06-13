@@ -324,16 +324,11 @@ final class HomeViewModel: ObservableObject {
                 + playlistTracks
                 + likedPlaylistTracks
         )
-        let relatedMixes = await relatedMixes(
-            from: seedTracks,
-            api: api,
-            username: nextMe?.username
-        )
-        let nextStationMixes = Self.buildStationMixes(from: relatedMixes, fallbackTracks: seedTracks)
-        let relatedTracks = Self.uniqueTracks(relatedMixes.flatMap(\.tracks))
+        let nextStationMixes = await stationMixes(from: seedTracks, api: api)
+        let stationTracks = Self.uniqueTracks(nextStationMixes.flatMap(\.tracks))
         let discoveryTracks = await discoveryFallbackTracks(
             api: api,
-            existingCount: Self.uniqueTracks(seedTracks + relatedTracks).count,
+            existingCount: Self.uniqueTracks(seedTracks + stationTracks).count,
             username: nextMe?.username
         )
 
@@ -344,7 +339,7 @@ final class HomeViewModel: ObservableObject {
             nextFeedTracks = Array(Self.uniqueTracks(nextFeedTracks + nextFollowingTracks + discoveryTracks).prefix(24))
         }
 
-        let nextRecommended = Self.uniqueTracks(seedTracks + relatedTracks + discoveryTracks)
+        let nextRecommended = Self.uniqueTracks(seedTracks + stationTracks + discoveryTracks)
 
         me = nextMe
         feedTracks = nextFeedTracks
@@ -358,7 +353,9 @@ final class HomeViewModel: ObservableObject {
             feedTracks: nextFeedTracks,
             followingTracks: nextFollowingTracks,
             likedTracks: nextLikedTracks,
-            relatedMixes: relatedMixes,
+            playlistTracks: playlistTracks,
+            likedPlaylistTracks: likedPlaylistTracks,
+            recommendedTracks: nextRecommended,
             username: nextMe?.username
         )
         selectedPlaylist = nil
@@ -392,7 +389,7 @@ final class HomeViewModel: ObservableObject {
                 feedTracks: discovery.collection,
                 followingTracks: [],
                 likedTracks: alternates.collection,
-                relatedMixes: [],
+                recommendedTracks: tracks,
                 username: nil
             )
             stationMixes = Self.buildFallbackStationMixes(from: tracks)
@@ -420,50 +417,35 @@ final class HomeViewModel: ObservableObject {
         return Self.uniqueTracks(tracks)
     }
 
-    private func relatedMixes(
+    private func stationMixes(
         from seedTracks: [SCTrack],
-        api: SoundCloudAPIClienting,
-        username: String?
+        api: SoundCloudAPIClienting
     ) async -> [HomeMix] {
-        var mixes: [HomeMix] = []
+        var stations: [HomeMix] = []
         var usedTracks = Set<String>()
 
-        for seed in seedTracks.prefix(7) {
-            guard mixes.count < 5 else { break }
-            guard let page = try? await api.relatedTracks(trackURN: seed.urn, limit: 25, nextHref: nil) else {
+        for seed in Self.uniqueTracks(seedTracks).prefix(7) {
+            guard stations.count < 5 else { break }
+            guard let page = try? await api.relatedTracks(trackURN: seed.urn, limit: 30, nextHref: nil) else {
                 continue
             }
 
-            let uniqueRelated = Self.uniqueTracks(page.collection)
+            let stationTracks = Self.uniqueTracks([seed] + page.collection)
                 .filter { track in
-                    guard track.id != seed.id else { return false }
+                    if track.id == seed.id { return true }
                     return !usedTracks.contains(track.id)
                 }
-            guard uniqueRelated.count >= 2 else { continue }
+            guard stationTracks.count >= 2 else { continue }
 
-            uniqueRelated.prefix(18).forEach { usedTracks.insert($0.id) }
-            mixes.append(
+            stationTracks.prefix(24).forEach { usedTracks.insert($0.id) }
+            stations.append(
                 HomeMix(
-                    id: "mein-mix-\(mixes.count + 1)-\(seed.id)",
-                    title: "Mein Mix \(mixes.count + 1)",
-                    subtitle: "\(uniqueRelated.prefix(18).count) ähnliche Tracks zu \(seed.title)",
-                    tracks: Array(uniqueRelated.prefix(18)),
-                    iconName: mixes.count.isMultiple(of: 2) ? "sparkles" : "dot.radiowaves.left.and.right"
+                    id: "sender-\(seed.id)",
+                    title: "\(seed.user.username) Sender",
+                    subtitle: "Radio aus \(seed.title)",
+                    tracks: Array(stationTracks.prefix(24)),
+                    iconName: "dot.radiowaves.left.and.right"
                 )
-            )
-        }
-
-        return mixes
-    }
-
-    private static func buildStationMixes(from relatedMixes: [HomeMix], fallbackTracks: [SCTrack]) -> [HomeMix] {
-        let stations = relatedMixes.prefix(5).enumerated().map { index, mix in
-            HomeMix(
-                id: "sender-\(mix.id)",
-                title: "Sender \(index + 1)",
-                subtitle: mix.subtitle.replacingOccurrences(of: "ähnliche Tracks", with: "Radio-Tracks"),
-                tracks: mix.tracks,
-                iconName: "dot.radiowaves.left.and.right"
             )
         }
 
@@ -471,7 +453,7 @@ final class HomeViewModel: ObservableObject {
             return stations
         }
 
-        return buildFallbackStationMixes(from: fallbackTracks)
+        return Self.buildFallbackStationMixes(from: seedTracks)
     }
 
     private static func buildFallbackStationMixes(from tracks: [SCTrack]) -> [HomeMix] {
@@ -549,13 +531,22 @@ final class HomeViewModel: ObservableObject {
         feedTracks: [SCTrack],
         followingTracks: [SCTrack],
         likedTracks: [SCTrack],
-        relatedMixes: [HomeMix],
+        playlistTracks: [SCTrack] = [],
+        likedPlaylistTracks: [SCTrack] = [],
+        recommendedTracks: [SCTrack] = [],
         username: String?
     ) -> [HomeMix] {
         let dailyDrops = uniqueTracks(feedTracks + followingTracks)
         let weeklyWave = uniqueTracks(followingTracks + feedTracks)
-        let fallback = uniqueTracks(likedTracks + feedTracks + followingTracks)
-        guard !dailyDrops.isEmpty || !weeklyWave.isEmpty || !relatedMixes.isEmpty || !fallback.isEmpty else {
+        let personalPool = uniqueTracks(
+            likedTracks
+                + playlistTracks
+                + likedPlaylistTracks
+                + recommendedTracks
+                + feedTracks
+                + followingTracks
+        )
+        guard !dailyDrops.isEmpty || !weeklyWave.isEmpty || !personalPool.isEmpty else {
             return []
         }
 
@@ -581,14 +572,30 @@ final class HomeViewModel: ObservableObject {
             ))
         }
 
-        mixes.append(contentsOf: relatedMixes)
+        if !personalPool.isEmpty {
+            let mixCount = min(4, max(1, personalPool.count))
+            for index in 0..<mixCount {
+                let offset = (index * 6) % personalPool.count
+                let rotated = Array(personalPool.dropFirst(offset)) + Array(personalPool.prefix(offset))
+                let tracks = Array(uniqueTracks(rotated).prefix(24))
+                guard !tracks.isEmpty else { continue }
 
-        if mixes.isEmpty, !fallback.isEmpty {
+                mixes.append(HomeMix(
+                    id: "mein-mix-\(index + 1)",
+                    title: "Mein Mix \(index + 1)",
+                    subtitle: "\(tracks.count) Tracks aus Likes, Playlists und Start",
+                    tracks: tracks,
+                    iconName: index.isMultiple(of: 2) ? "sparkles" : "waveform"
+                ))
+            }
+        }
+
+        if mixes.isEmpty, !personalPool.isEmpty {
             mixes.append(HomeMix(
                 id: "start-fallback",
                 title: "Mehr für dich",
-                subtitle: "\(min(fallback.count, 24)) Tracks aus deiner SoundCloud-Bibliothek",
-                tracks: Array(fallback.prefix(24)),
+                subtitle: "\(min(personalPool.count, 24)) Tracks aus deiner SoundCloud-Bibliothek",
+                tracks: Array(personalPool.prefix(24)),
                 iconName: "sparkles"
             ))
         }
@@ -639,11 +646,11 @@ final class HomeViewModel: ObservableObject {
             feedTracks: cached.feedTracks,
             followingTracks: cached.followingTracks,
             likedTracks: cached.likedTracks,
-            relatedMixes: [],
+            recommendedTracks: cached.recommendedTracks,
             username: cached.me?.username
         )
         stationMixes = Self.buildFallbackStationMixes(
-            from: cached.feedTracks + cached.followingTracks + cached.likedTracks
+            from: cached.feedTracks + cached.followingTracks + cached.likedTracks + cached.recommendedTracks
         )
     }
 
