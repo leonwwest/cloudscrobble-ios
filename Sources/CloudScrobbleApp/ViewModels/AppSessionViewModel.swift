@@ -237,6 +237,11 @@ final class AppSessionViewModel: ObservableObject {
             return
         }
 
+        if let message = localBrokerUnavailableOnCurrentNetworkMessage() {
+            statusMessage = message
+            return
+        }
+
         isBusy = true
         defer { isBusy = false }
 
@@ -267,6 +272,11 @@ final class AppSessionViewModel: ObservableObject {
     func connectSoundCloudPublicMode() async {
         guard let soundCloudAuthService, realSoundCloudAPIClient != nil, realPlaybackResolver != nil else {
             statusMessage = "Missing app configuration. Fill .env values first."
+            return
+        }
+
+        if let message = localBrokerUnavailableOnCurrentNetworkMessage() {
+            statusMessage = message
             return
         }
 
@@ -330,7 +340,7 @@ final class AppSessionViewModel: ObservableObject {
             statusMessage = "SoundCloud connected"
         } catch {
             pendingSoundCloudAuthorization = nil
-            statusMessage = "SoundCloud callback failed: \(error.localizedDescription)"
+            statusMessage = normalizedSoundCloudCallbackErrorMessage(error)
         }
     }
 
@@ -340,18 +350,32 @@ final class AppSessionViewModel: ObservableObject {
             return
         }
 
+        if let message = localBrokerUnavailableOnCurrentNetworkMessage() {
+            statusMessage = message
+            return
+        }
+
         isBusy = true
         defer { isBusy = false }
 
         do {
             _ = try await lastFMAuthService.authenticate(username: username, password: password)
             playerController.setLastFMScrobbler(lastFMScrobbleService)
-            try await lastFMScrobbleService.flushPendingScrobbles()
-            let pending = await lastFMScrobbleService.pendingScrobbleCount()
-            await playerController.refreshLastFMDiagnostics()
             lastFMConnected = true
             cachedLastFMTasteTracks = nil
-            statusMessage = pending == 0 ? "Last.fm connected" : "Last.fm connected (\(pending) pending scrobbles)"
+
+            do {
+                try await lastFMScrobbleService.flushPendingScrobbles()
+                let pending = await lastFMScrobbleService.pendingScrobbleCount()
+                await playerController.refreshLastFMDiagnostics()
+                statusMessage = pending == 0 ? "Last.fm connected" : "Last.fm connected (\(pending) pending scrobbles)"
+            } catch {
+                let pending = await lastFMScrobbleService.pendingScrobbleCount()
+                await playerController.refreshLastFMDiagnostics()
+                statusMessage = pending == 0
+                    ? "Last.fm connected, but scrobble retry failed: \(error.localizedDescription)"
+                    : "Last.fm connected, \(pending) pending scrobbles remain: \(error.localizedDescription)"
+            }
         } catch {
             statusMessage = "Last.fm login failed: \(error.localizedDescription)"
         }
@@ -647,6 +671,59 @@ final class AppSessionViewModel: ObservableObject {
             return "SoundCloud login canceled."
         }
         return "SoundCloud login failed: \(error.localizedDescription)"
+    }
+
+    private func normalizedSoundCloudCallbackErrorMessage(_ error: Error) -> String {
+        if isLikelyConnectivityError(error),
+           let message = localBrokerUnavailableOnCurrentNetworkMessage() {
+            return message
+        }
+        return "SoundCloud callback failed: \(error.localizedDescription)"
+    }
+
+    private func localBrokerUnavailableOnCurrentNetworkMessage() -> String? {
+        guard let config,
+              networkStatusLabel == "Cellular",
+              Self.isLocalNetworkURL(config.tokenBrokerBaseURL) else {
+            return nil
+        }
+
+        let host = config.tokenBrokerBaseURL.host(percentEncoded: false) ?? config.tokenBrokerBaseURL.absoluteString
+        return "Local broker \(host) is not reachable on Cellular. Switch to the same Wi-Fi or use a deployed Worker URL."
+    }
+
+    private func isLikelyConnectivityError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else { return false }
+        return [
+            NSURLErrorCannotConnectToHost,
+            NSURLErrorCannotFindHost,
+            NSURLErrorDNSLookupFailed,
+            NSURLErrorNetworkConnectionLost,
+            NSURLErrorNotConnectedToInternet,
+            NSURLErrorTimedOut
+        ].contains(nsError.code)
+    }
+
+    private nonisolated static func isLocalNetworkURL(_ url: URL) -> Bool {
+        guard let host = url.host(percentEncoded: false)?.lowercased() else {
+            return false
+        }
+
+        if host == "localhost" || host.hasSuffix(".local") || host == "::1" {
+            return true
+        }
+
+        if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
+            return true
+        }
+
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        if parts.count == 4, parts[0] == 172, (16...31).contains(parts[1]) {
+            return true
+        }
+
+        return host.hasPrefix("fc") || host.hasPrefix("fd") || host.hasPrefix("fe80:")
     }
 
     private func boundedPlaybackQueue(

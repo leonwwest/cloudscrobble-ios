@@ -6,10 +6,11 @@ struct AppConfig {
     let soundCloudRedirectURI: String
     let tokenBrokerBaseURL: URL
 
+    private static let deployedTokenBrokerBaseURL = URL(string: "https://broker.example")!
+
     static let requiredConfigurationKeys = [
         "SOUNDCLOUD_CLIENT_ID",
-        "SOUNDCLOUD_REDIRECT_URI",
-        "SOUNDCLOUD_TOKEN_BROKER_BASE_URL"
+        "SOUNDCLOUD_REDIRECT_URI"
     ]
 
     static func load() -> AppConfig? {
@@ -26,8 +27,7 @@ struct AppConfig {
 
     private static func makeConfig(from values: [String: Any]) -> AppConfig? {
         guard let rawSoundCloudClientID = stringValue(for: "SOUNDCLOUD_CLIENT_ID", in: values),
-              let rawRedirectURI = stringValue(for: "SOUNDCLOUD_REDIRECT_URI", in: values),
-              let rawTokenBroker = stringValue(for: "SOUNDCLOUD_TOKEN_BROKER_BASE_URL", in: values) else {
+              let rawRedirectURI = stringValue(for: "SOUNDCLOUD_REDIRECT_URI", in: values) else {
             return nil
         }
 
@@ -38,18 +38,50 @@ struct AppConfig {
             return nil
         }
 
-        guard let tokenBrokerBaseURL = URL(string: rawTokenBroker),
-              let tokenBrokerScheme = tokenBrokerBaseURL.scheme?.lowercased(),
-              ["http", "https"].contains(tokenBrokerScheme),
-              tokenBrokerBaseURL.host != nil else {
-            return nil
-        }
+        let tokenBrokerBaseURL = validatedTokenBrokerURL(from: values)
 
         return AppConfig(
             soundCloudClientID: rawSoundCloudClientID,
             soundCloudRedirectURI: rawRedirectURI,
             tokenBrokerBaseURL: tokenBrokerBaseURL
         )
+    }
+
+    private static func validatedTokenBrokerURL(from values: [String: Any]) -> URL {
+        guard let rawTokenBroker = stringValue(for: "SOUNDCLOUD_TOKEN_BROKER_BASE_URL", in: values),
+              let tokenBrokerBaseURL = URL(string: rawTokenBroker),
+              let tokenBrokerScheme = tokenBrokerBaseURL.scheme?.lowercased(),
+              ["http", "https"].contains(tokenBrokerScheme),
+              tokenBrokerBaseURL.host != nil else {
+            return deployedTokenBrokerBaseURL
+        }
+
+        return publicTokenBrokerURL(for: tokenBrokerBaseURL)
+    }
+
+    private static func publicTokenBrokerURL(for configuredURL: URL) -> URL {
+        isLocalNetworkURL(configuredURL) ? deployedTokenBrokerBaseURL : configuredURL
+    }
+
+    private static func isLocalNetworkURL(_ url: URL) -> Bool {
+        guard let host = url.host(percentEncoded: false)?.lowercased() else {
+            return false
+        }
+
+        if host == "localhost" || host.hasSuffix(".local") || host == "::1" {
+            return true
+        }
+
+        if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
+            return true
+        }
+
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        if parts.count == 4, parts[0] == 172, (16...31).contains(parts[1]) {
+            return true
+        }
+
+        return host.hasPrefix("fc") || host.hasPrefix("fd") || host.hasPrefix("fe80:")
     }
 
     private static func stringValue(for key: String, in values: [String: Any]) -> String? {

@@ -87,6 +87,35 @@ final class SoundCloudAuthServiceTests: XCTestCase {
         XCTAssertEqual(refreshCallCount, 0)
         XCTAssertEqual(clientCredentialsCallCount, 1)
     }
+
+    func testSoundCloudTokenPersistsAbsoluteExpiration() throws {
+        let expiresAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let token = SoundCloudToken(
+            accessToken: "access",
+            refreshToken: "refresh",
+            tokenType: "Bearer",
+            scope: nil,
+            expiresAt: expiresAt
+        )
+
+        let data = try JSONEncoder().encode(token)
+        let payload = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let decoded = try JSONDecoder().decode(SoundCloudToken.self, from: data)
+
+        XCTAssertTrue(payload.contains("expires_at_unix"))
+        XCTAssertFalse(payload.contains("expires_in"))
+        XCTAssertEqual(try XCTUnwrap(decoded.expiresAt).timeIntervalSince1970, expiresAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    func testSoundCloudTokenStillDecodesExpiresInResponses() throws {
+        let data = Data(#"{"access_token":"access","token_type":"Bearer","expires_in":3600}"#.utf8)
+        let decoded = try JSONDecoder().decode(SoundCloudToken.self, from: data)
+
+        XCTAssertEqual(decoded.accessToken, "access")
+        XCTAssertNil(decoded.refreshToken)
+        XCTAssertNotNil(decoded.expiresAt)
+        XCTAssertFalse(decoded.isExpired(leeway: 3_500))
+    }
 }
 
 private actor MockSoundCloudAuthProvider: SoundCloudAuthProviding {

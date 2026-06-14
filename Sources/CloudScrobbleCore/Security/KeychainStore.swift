@@ -9,18 +9,29 @@ public final class KeychainStore: @unchecked Sendable {
     }
 
     public func save(data: Data, account: String) throws {
-        var query: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
 
-        SecItemDelete(query as CFDictionary)
-        query[kSecValueData as String] = data
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw CloudScrobbleError.invalidConfiguration("Keychain write failed: \(status)")
+        switch updateStatus {
+        case errSecSuccess:
+            return
+        case errSecItemNotFound:
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw CloudScrobbleError.invalidConfiguration("Keychain write failed: \(addStatus)")
+            }
+        default:
+            throw CloudScrobbleError.invalidConfiguration("Keychain update failed: \(updateStatus)")
         }
     }
 

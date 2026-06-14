@@ -40,12 +40,14 @@ Set these in the project-root `.env` before running the app target:
 ```bash
 export SOUNDCLOUD_CLIENT_ID="..."
 export SOUNDCLOUD_REDIRECT_URI="cloudscrobble://oauth"
-export SOUNDCLOUD_TOKEN_BROKER_BASE_URL="http://localhost:8787"
+export SOUNDCLOUD_TOKEN_BROKER_BASE_URL="https://broker.example"
 export LASTFM_API_KEY="..."
 export LASTFM_API_SECRET="..."
 ```
 
-Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in `backend/.env`, because the iOS app talks to the local token broker instead of sending the SoundCloud secret from the app.
+`SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is optional for current app builds. If it is missing, invalid, or points at a private/local address, the app falls back to the deployed Worker URL above.
+
+Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in `backend/.env` or Cloudflare Worker secrets, because the iOS app talks to the token broker instead of sending the SoundCloud secret from the app.
 
 ## Run backend
 ```bash
@@ -89,12 +91,12 @@ The helper writes env vars to an untracked user scheme under `xcuserdata`, not t
 ## SoundCloud OAuth checklist
 If "Connect SoundCloud" fails in-app, verify:
 1. SoundCloud app redirect URI is exactly `cloudscrobble://oauth`.
-2. Backend token broker is running on the same URL as `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.
+2. The deployed Worker is healthy: `curl https://broker.example/healthz`.
 3. Xcode scheme env vars are synced (run `./scripts/sync_env_to_xcode_scheme.sh`).
 4. iOS URL scheme `cloudscrobble` is present in `ios/project.yml` (generated into Info.plist).
 5. In SoundCloud app settings (`https://soundcloud.com/you/apps`) click `Speichern` after entering redirect URI.
 6. Validate broker credentials quickly:
-   `curl -X POST http://127.0.0.1:8787/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -d '{}'`
+   `curl -X POST https://broker.example/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -d '{}'`
    If this returns `{"error":"invalid_client"}`, your `SOUNDCLOUD_CLIENT_ID` / `SOUNDCLOUD_CLIENT_SECRET` pair is wrong.
 7. If SoundCloud auth opens as a blank white page, disable system Auto Proxy / WPAD on macOS network settings and restart Simulator.
 8. Fallback for testing:

@@ -66,6 +66,8 @@ type RequestWithCF = Request & {
 };
 
 const VERSION = "2026.06.13.1";
+const MAX_JSON_BODY_BYTES = 64 * 1024;
+const MAX_UPSTREAM_JSON_BYTES = 2 * 1024 * 1024;
 const rateLimitBuckets = new Map<string, RateLimitBucket>();
 
 export default {
@@ -166,7 +168,7 @@ async function handleExchange(request: Request, env: Env): Promise<Response> {
 
   const body = await parseJSON<ExchangeRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
   const { code, codeVerifier, redirectUri } = body.value;
@@ -198,7 +200,7 @@ async function handleRefresh(request: Request, env: Env): Promise<Response> {
 
   const body = await parseJSON<RefreshRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
   const { refreshToken } = body.value;
@@ -247,10 +249,11 @@ async function handleLastFMMobileSession(request: Request, env: Env): Promise<Re
 
   const body = await parseJSON<LastFMAuthRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
-  const { username, password } = body.value;
+  const username = body.value.username?.trim();
+  const { password } = body.value;
   if (!username || !password) {
     return json({ error: "missing_required_fields" }, 400);
   }
@@ -278,7 +281,7 @@ async function handleLastFMNowPlaying(request: Request, env: Env): Promise<Respo
 
   const body = await parseJSON<LastFMNowPlayingRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
   const { sessionKey, artist, track, durationSeconds } = body.value;
@@ -314,7 +317,7 @@ async function handleLastFMScrobble(request: Request, env: Env): Promise<Respons
 
   const body = await parseJSON<LastFMScrobbleRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
   const { sessionKey, scrobbles } = body.value;
@@ -330,7 +333,7 @@ async function handleLastFMScrobble(request: Request, env: Env): Promise<Respons
   };
 
   for (const [index, item] of batch.entries()) {
-    if (!item.artist || !item.track || typeof item.timestamp !== "number" || !Number.isFinite(item.timestamp)) {
+    if (!item.artist || !item.track || typeof item.timestamp !== "number" || !Number.isFinite(item.timestamp) || item.timestamp <= 0) {
       return json({ error: "invalid_scrobble_payload" }, 400);
     }
     params[`artist[${index}]`] = item.artist;
@@ -354,7 +357,7 @@ async function handleLastFMTaste(request: Request, env: Env): Promise<Response> 
 
   const body = await parseJSON<LastFMTasteRequest>(request);
   if (!body.ok) {
-    return json({ error: "invalid_json" }, 400);
+    return jsonParseError(body.error);
   }
 
   const username = body.value.username?.trim();
@@ -416,7 +419,11 @@ async function proxyTokenRequest(
     return json({ error: "upstream_unavailable" }, 502);
   }
 
-  const text = await upstream.text();
+  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
+  if (!textResult.ok) {
+    return json({ error: "upstream_response_too_large" }, 502);
+  }
+  const text = textResult.value;
   let responseBody = text;
 
   try {
@@ -453,7 +460,11 @@ async function proxyLastFMRequest(cfg: LastFMConfig, params: Record<string, stri
     return json({ error: "upstream_unavailable" }, 502);
   }
 
-  const text = await upstream.text();
+  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
+  if (!textResult.ok) {
+    return json({ error: "upstream_response_too_large" }, 502);
+  }
+  const text = textResult.value;
   let responseBody = text;
 
   try {
@@ -494,7 +505,11 @@ async function fetchLastFMJSON(cfg: LastFMConfig, params: Record<string, string>
     return { ok: false, status: 502, payload: { error: "upstream_unavailable" } };
   }
 
-  const text = await upstream.text();
+  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
+  if (!textResult.ok) {
+    return { ok: false, status: 502, payload: { error: "upstream_response_too_large" } };
+  }
+  const text = textResult.value;
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -531,11 +546,11 @@ function normalizeTopArtists(value: unknown): Array<{ name: string; playcount: n
   return artists.flatMap((raw) => {
     const record = readRecord(raw);
     const name = readString(record.name);
-    const playcount = Number(readString(record.playcount) || 0);
+    const playcount = readNumber(record.playcount);
     if (!name) {
       return [];
     }
-    return [{ name, playcount: Number.isFinite(playcount) ? playcount : 0 }];
+    return [{ name, playcount }];
   });
 }
 
@@ -563,9 +578,7 @@ function loadConfig(env: Env): Result<BrokerConfig> {
   }
 
   const tokenURL = env.SOUNDCLOUD_TOKEN_URL || "https://secure.soundcloud.com/oauth/token";
-  try {
-    new URL(tokenURL);
-  } catch {
+  if (!isValidHTTPURL(tokenURL)) {
     return { ok: false, error: "invalid_soundcloud_token_url" };
   }
 
@@ -589,9 +602,7 @@ function loadLastFMConfig(env: Env): Result<LastFMConfig> {
   }
 
   const apiURL = env.LASTFM_API_URL || "https://ws.audioscrobbler.com/2.0/";
-  try {
-    new URL(apiURL);
-  } catch {
+  if (!isValidHTTPURL(apiURL)) {
     return { ok: false, error: "invalid_lastfm_api_url" };
   }
 
@@ -605,6 +616,15 @@ function loadLastFMConfig(env: Env): Result<LastFMConfig> {
   };
 }
 
+function isValidHTTPURL(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function signLastFM(params: Record<string, string>, apiSecret: string): string {
   const payload = Object.entries(params)
     .filter(([key]) => key !== "format" && key !== "callback" && key !== "api_sig")
@@ -616,11 +636,63 @@ function signLastFM(params: Record<string, string>, apiSecret: string): string {
 }
 
 async function parseJSON<T>(request: Request): Promise<Result<T>> {
+  const contentLength = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
+    return { ok: false, error: "request_too_large" };
+  }
+
   try {
-    return { ok: true, value: (await request.json()) as T };
+    const text = await readLimitedText(request.body, MAX_JSON_BODY_BYTES);
+    if (!text.ok) {
+      return { ok: false, error: "request_too_large" };
+    }
+    return { ok: true, value: JSON.parse(text.value) as T };
   } catch {
     return { ok: false, error: "invalid_json" };
   }
+}
+
+function jsonParseError(error: string): Response {
+  return json({ error }, error === "request_too_large" ? 413 : 400);
+}
+
+async function readLimitedText(
+  stream: ReadableStream<Uint8Array> | null,
+  maxBytes: number
+): Promise<Result<string>> {
+  if (!stream) {
+    return { ok: true, value: "" };
+  }
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maxBytes) {
+      await reader.cancel();
+      return { ok: false, error: "request_too_large" };
+    }
+    chunks.push(value);
+  }
+
+  const buffer = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return { ok: true, value: new TextDecoder().decode(buffer) };
 }
 
 function json(payload: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -649,11 +721,28 @@ function readRecord(value: unknown): Record<string, unknown> {
 }
 
 function readArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    return [value];
+  }
+  return [];
 }
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 function isLastFMError(value: unknown): boolean {

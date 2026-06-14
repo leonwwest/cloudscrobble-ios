@@ -39,7 +39,7 @@ npm run deploy
 Test the deployed Worker:
 
 ```bash
-curl https://cloudscrobble-token-broker.<your-subdomain>.workers.dev/healthz
+curl https://broker.example/healthz
 ```
 
 Expected:
@@ -48,4 +48,4 @@ Expected:
 {"status":"ok"}
 ```
 
-After deploy, set the iOS app's `SOUNDCLOUD_TOKEN_BROKER_BASE_URL` to the Worker URL and rebuild the app.
+Current iOS builds default to the deployed Worker URL. If `SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is set to a localhost, LAN, or other private URL, the app replaces it with the deployed Worker at startup.

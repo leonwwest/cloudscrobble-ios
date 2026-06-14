@@ -13,6 +13,7 @@ public struct SoundCloudToken: Codable, Sendable {
         case tokenType = "token_type"
         case scope
         case expiresIn = "expires_in"
+        case expiresAtUnix = "expires_at_unix"
     }
 
     public init(from decoder: Decoder) throws {
@@ -22,7 +23,9 @@ public struct SoundCloudToken: Codable, Sendable {
         tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
         scope = try container.decodeIfPresent(String.self, forKey: .scope)
 
-        if let expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) {
+        if let expiresAtUnix = try container.decodeIfPresent(Double.self, forKey: .expiresAtUnix) {
+            expiresAt = Date(timeIntervalSince1970: expiresAtUnix)
+        } else if let expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) {
             expiresAt = Date().addingTimeInterval(TimeInterval(expiresIn))
         } else {
             expiresAt = nil
@@ -36,10 +39,7 @@ public struct SoundCloudToken: Codable, Sendable {
         try container.encodeIfPresent(tokenType, forKey: .tokenType)
         try container.encodeIfPresent(scope, forKey: .scope)
 
-        if let expiresAt {
-            let remaining = max(0, Int(expiresAt.timeIntervalSinceNow.rounded()))
-            try container.encode(remaining, forKey: .expiresIn)
-        }
+        try container.encodeIfPresent(expiresAt?.timeIntervalSince1970, forKey: .expiresAtUnix)
     }
 
     public init(

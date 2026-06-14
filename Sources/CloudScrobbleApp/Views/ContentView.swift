@@ -317,7 +317,7 @@ struct ContentView: View {
                         }
 
                         if !session.isConfigured {
-                            Text("Set app config values and start backend at `SOUNDCLOUD_TOKEN_BROKER_BASE_URL`.")
+                            Text("Set SoundCloud app config values and rebuild the app.")
                                 .font(.system(.caption2, design: .serif))
                                 .foregroundStyle(CloudTheme.warning)
                                 .lineLimit(2)

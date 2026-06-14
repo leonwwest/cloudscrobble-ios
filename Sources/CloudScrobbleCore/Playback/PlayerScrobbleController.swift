@@ -57,6 +57,7 @@ public final class PlayerScrobbleController: ObservableObject {
     private var shouldResumeAfterInterruption = false
     private var lastSnapshotPersistedAt: Date?
     private var stalledRecoveryTask: Task<Void, Never>?
+    private var activePlayerItemIDs: Set<ObjectIdentifier> = []
 #if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
     private var nowPlayingArtworkTask: Task<Void, Never>?
     private var nowPlayingArtworkTrackURN: String?
@@ -190,7 +191,7 @@ public final class PlayerScrobbleController: ObservableObject {
         orderedQueue.append(item)
         queue.append(item)
 
-        let playerItem = makePlayerItem(for: item)
+        let playerItem = makeTrackedPlayerItem(for: item)
         if player.canInsert(playerItem, after: nil) {
             player.insert(playerItem, after: nil)
         }
@@ -215,7 +216,7 @@ public final class PlayerScrobbleController: ObservableObject {
         queue.insert(item, at: insertIndex)
         orderedQueue.insert(item, at: min(insertIndex, orderedQueue.count))
 
-        let playerItem = makePlayerItem(for: item)
+        let playerItem = makeTrackedPlayerItem(for: item)
         if player.canInsert(playerItem, after: player.currentItem) {
             player.insert(playerItem, after: player.currentItem)
         }
@@ -275,6 +276,7 @@ public final class PlayerScrobbleController: ObservableObject {
         stalledRecoveryTask = nil
         player.pause()
         player.removeAllItems()
+        activePlayerItemIDs.removeAll()
         queue = []
         orderedQueue = []
         currentIndex = nil
@@ -366,9 +368,10 @@ public final class PlayerScrobbleController: ObservableObject {
         currentIndex = snapshot.currentIndex
         elapsedSeconds = max(0, snapshot.elapsedSeconds)
         player.removeAllItems()
+        activePlayerItemIDs.removeAll()
 
         for item in queue[snapshot.currentIndex...] {
-            let playerItem = makePlayerItem(for: item)
+            let playerItem = makeTrackedPlayerItem(for: item)
             if player.canInsert(playerItem, after: nil) {
                 player.insert(playerItem, after: nil)
             }
@@ -427,9 +430,10 @@ public final class PlayerScrobbleController: ObservableObject {
         player.volume = 1
         player.pause()
         player.removeAllItems()
+        activePlayerItemIDs.removeAll()
 
         for item in queue[index...] {
-            let playerItem = makePlayerItem(for: item)
+            let playerItem = makeTrackedPlayerItem(for: item)
             if player.canInsert(playerItem, after: nil) {
                 player.insert(playerItem, after: nil)
             }
@@ -487,6 +491,19 @@ public final class PlayerScrobbleController: ObservableObject {
         return playerItem
     }
 
+    private func makeTrackedPlayerItem(for item: QueueItem) -> AVPlayerItem {
+        let playerItem = makePlayerItem(for: item)
+        activePlayerItemIDs.insert(ObjectIdentifier(playerItem))
+        return playerItem
+    }
+
+    private func isActivePlayerItemID(_ playerItemID: ObjectIdentifier?) -> Bool {
+        guard let playerItemID else {
+            return false
+        }
+        return activePlayerItemIDs.contains(playerItemID)
+    }
+
     private func configurePlayerItemBuffering(_ item: AVPlayerItem) {
         item.preferredForwardBufferDuration = 8
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
@@ -509,9 +526,11 @@ public final class PlayerScrobbleController: ObservableObject {
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.handleCurrentTrackEnded()
+        ) { [weak self] notification in
+            let playerItemID = (notification.object as? AVPlayerItem).map(ObjectIdentifier.init)
+            Task { @MainActor [weak self, playerItemID] in
+                guard let self, self.isActivePlayerItemID(playerItemID) else { return }
+                self.handleCurrentTrackEnded()
             }
         }
     }
@@ -522,10 +541,12 @@ public final class PlayerScrobbleController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            let playerItemID = (notification.object as? AVPlayerItem).map(ObjectIdentifier.init)
             let errorMessage = (notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error)?
                 .localizedDescription
-            Task { @MainActor [weak self] in
-                self?.handlePlaybackProblem(errorMessage: errorMessage)
+            Task { @MainActor [weak self, playerItemID, errorMessage] in
+                guard let self, self.isActivePlayerItemID(playerItemID) else { return }
+                self.handlePlaybackProblem(errorMessage: errorMessage)
             }
         }
 
@@ -533,9 +554,11 @@ public final class PlayerScrobbleController: ObservableObject {
             forName: .AVPlayerItemPlaybackStalled,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.handlePlaybackStalled()
+        ) { [weak self] notification in
+            let playerItemID = (notification.object as? AVPlayerItem).map(ObjectIdentifier.init)
+            Task { @MainActor [weak self, playerItemID] in
+                guard let self, self.isActivePlayerItemID(playerItemID) else { return }
+                self.handlePlaybackStalled()
             }
         }
     }
@@ -715,6 +738,7 @@ public final class PlayerScrobbleController: ObservableObject {
 
         player.pause()
         player.removeAllItems()
+        activePlayerItemIDs.removeAll()
 
         guard !queue.isEmpty else {
             scrobbleEngine.stop()
@@ -1054,9 +1078,10 @@ public final class PlayerScrobbleController: ObservableObject {
         let savedScrobbleState = scrobbleEngine.state
         player.pause()
         player.removeAllItems()
+        activePlayerItemIDs.removeAll()
 
         for item in queue[currentIndex...] {
-            let playerItem = makePlayerItem(for: item)
+            let playerItem = makeTrackedPlayerItem(for: item)
             if player.canInsert(playerItem, after: nil) {
                 player.insert(playerItem, after: nil)
             }

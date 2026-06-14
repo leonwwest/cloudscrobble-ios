@@ -32,11 +32,34 @@ func TestLoadConfigRejectsInvalidTokenURL(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsRelativeTokenURL(t *testing.T) {
+	t.Setenv("SOUNDCLOUD_CLIENT_ID", "id")
+	t.Setenv("SOUNDCLOUD_CLIENT_SECRET", "secret")
+	t.Setenv("SOUNDCLOUD_TOKEN_URL", "/oauth/token")
+
+	_, err := loadConfig()
+	if err == nil || !strings.Contains(err.Error(), "invalid SOUNDCLOUD_TOKEN_URL") {
+		t.Fatalf("expected invalid token url error, got %v", err)
+	}
+}
+
 func TestLoadConfigRejectsInvalidLastFMURL(t *testing.T) {
 	t.Setenv("SOUNDCLOUD_CLIENT_ID", "id")
 	t.Setenv("SOUNDCLOUD_CLIENT_SECRET", "secret")
 	t.Setenv("SOUNDCLOUD_TOKEN_URL", "https://secure.soundcloud.com/oauth/token")
 	t.Setenv("LASTFM_API_URL", "http://[::1")
+
+	_, err := loadConfig()
+	if err == nil || !strings.Contains(err.Error(), "invalid LASTFM_API_URL") {
+		t.Fatalf("expected invalid last.fm url error, got %v", err)
+	}
+}
+
+func TestLoadConfigRejectsRelativeLastFMURL(t *testing.T) {
+	t.Setenv("SOUNDCLOUD_CLIENT_ID", "id")
+	t.Setenv("SOUNDCLOUD_CLIENT_SECRET", "secret")
+	t.Setenv("SOUNDCLOUD_TOKEN_URL", "https://secure.soundcloud.com/oauth/token")
+	t.Setenv("LASTFM_API_URL", "/2.0/")
 
 	_, err := loadConfig()
 	if err == nil || !strings.Contains(err.Error(), "invalid LASTFM_API_URL") {
@@ -68,6 +91,34 @@ func TestExchangeEndpointRequiresFields(t *testing.T) {
 		t.Fatalf("invalid json response: %v", err)
 	}
 	if payload["error"] != "missing_required_fields" {
+		t.Fatalf("unexpected error payload: %+v", payload)
+	}
+}
+
+func TestExchangeEndpointRejectsOversizedJSON(t *testing.T) {
+	cfg := config{
+		SoundCloudClientID: "id",
+		SoundCloudSecret:   "secret",
+		SoundCloudTokenURL: "https://example.com/oauth/token",
+		AllowedOrigin:      "*",
+		RequestTimeout:     2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/soundcloud/exchange", strings.NewReader(`{"code":"`+strings.Repeat("a", 70*1024)+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rr.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json response: %v", err)
+	}
+	if payload["error"] != "request_too_large" {
 		t.Fatalf("unexpected error payload: %+v", payload)
 	}
 }

@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+const maxJSONBodyBytes int64 = 64 * 1024
+
 type config struct {
 	Addr               string
 	SoundCloudClientID string
@@ -104,8 +106,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req exchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -132,8 +133,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req refreshRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -174,8 +174,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req lastFMAuthRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 		if strings.TrimSpace(req.Username) == "" || req.Password == "" {
@@ -204,8 +203,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req lastFMNowPlayingRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 		if req.SessionKey == "" || req.Artist == "" || req.Track == "" {
@@ -238,8 +236,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req lastFMScrobbleRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 		if req.SessionKey == "" || len(req.Scrobbles) == 0 {
@@ -280,8 +277,7 @@ func newMux(cfg config) *http.ServeMux {
 		}
 
 		var req lastFMTasteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 		username := strings.TrimSpace(req.Username)
@@ -364,10 +360,10 @@ func loadConfig() (config, error) {
 		return cfg, errors.New("SOUNDCLOUD_CLIENT_SECRET is required")
 	}
 
-	if _, err := url.Parse(cfg.SoundCloudTokenURL); err != nil {
+	if err := validateHTTPURL(cfg.SoundCloudTokenURL); err != nil {
 		return cfg, fmt.Errorf("invalid SOUNDCLOUD_TOKEN_URL: %w", err)
 	}
-	if _, err := url.Parse(cfg.LastFMAPIURL); err != nil {
+	if err := validateHTTPURL(cfg.LastFMAPIURL); err != nil {
 		return cfg, fmt.Errorf("invalid LASTFM_API_URL: %w", err)
 	}
 
@@ -376,6 +372,34 @@ func loadConfig() (config, error) {
 
 func (cfg config) hasLastFMConfig() bool {
 	return cfg.LastFMAPIKey != "" && cfg.LastFMAPISecret != ""
+}
+
+func validateHTTPURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("must use http or https")
+	}
+	if parsed.Host == "" {
+		return errors.New("must include host")
+	}
+	return nil
+}
+
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(target); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request_too_large"})
+		} else {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		}
+		return false
+	}
+	return true
 }
 
 type tokenRequestOption func(*http.Request)

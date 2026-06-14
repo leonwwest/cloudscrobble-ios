@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cloudscrobble-token-broker",
   "main": "src/index.ts",
-  "compatibility_date": "2025-12-01",
+  "compatibility_date": "2026-06-14",
   "workers_dev": true,
   "vars": {
     "SOUNDCLOUD_TOKEN_URL": "https://secure.soundcloud.com/oauth/token",
