@@ -355,16 +355,7 @@ private struct LibraryProfileHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: user?.avatarURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(CloudTheme.elevatedStrong)
-                        .overlay(Image(systemName: "person.fill").foregroundStyle(CloudTheme.sky))
-                }
-            }
+            CachedArtworkImage(url: user?.avatarURL, iconName: "person.fill", maxPixelSize: 180)
             .frame(width: 54, height: 54)
             .clipShape(Circle())
 
@@ -638,11 +629,11 @@ private struct LibraryTrackRow: View {
                 .frame(width: 58, height: 58)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
+                Text(displayMetadata.track)
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
-                Text("\(track.user.username) - \(durationText(track.durationMs))")
+                Text("\(displayMetadata.artist) - \(durationText(track.durationMs))")
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
                     .lineLimit(1)
@@ -722,6 +713,10 @@ private struct LibraryTrackRow: View {
 #if os(iOS)
         UIPasteboard.general.string = text
 #endif
+    }
+
+    private var displayMetadata: LastFMTrackMeta {
+        TrackIdentity.displayMetadata(for: track)
     }
 }
 
@@ -871,22 +866,7 @@ private struct ArtworkTile: View {
     let iconName: String
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-            default:
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(CloudTheme.elevatedStrong)
-                    .overlay(
-                        Image(systemName: iconName)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(CloudTheme.sky)
-                    )
-            }
-        }
+        CachedArtworkImage(url: url, iconName: iconName)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

@@ -41,6 +41,7 @@ public protocol SoundCloudAPIClienting: Sendable {
 
 public protocol PlaybackResolving: Sendable {
     func resolvePlayableStream(for trackURN: String) async throws -> ResolvedPlaybackStream
+    func prefetchPlayableStreams(for trackURNs: [String]) async
 }
 
 public protocol LastFMAuthenticating: Sendable {

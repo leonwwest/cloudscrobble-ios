@@ -234,27 +234,16 @@ private struct TrackResultCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: track.artworkURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(CloudTheme.elevatedStrong)
-                        .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
-                }
-            }
+            CachedArtworkImage(url: track.artworkURL, iconName: "music.note", maxPixelSize: 180)
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
+                Text(displayMetadata.track)
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
-                Text(track.user.username)
+                Text(displayMetadata.artist)
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             }
@@ -328,6 +317,10 @@ private struct TrackResultCard: View {
         UIPasteboard.general.string = text
 #endif
     }
+
+    private var displayMetadata: LastFMTrackMeta {
+        TrackIdentity.displayMetadata(for: track)
+    }
 }
 
 private struct PlaylistResultCard: View {
@@ -389,16 +382,7 @@ private struct UserResultCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: user.avatarURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(CloudTheme.elevatedStrong)
-                        .overlay(Image(systemName: "person.fill").foregroundStyle(CloudTheme.sky))
-                }
-            }
+            CachedArtworkImage(url: user.avatarURL, iconName: "person.fill", maxPixelSize: 160)
             .frame(width: 42, height: 42)
             .clipShape(Circle())
 

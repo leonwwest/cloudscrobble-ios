@@ -20,6 +20,7 @@ struct PlayerView: View {
                 nowPlayingCard
                 queueCard
                 recentlyPlayedCard
+                scrobbleHistoryCard
                 debugCard
             }
             .padding(.vertical, 10)
@@ -245,7 +246,7 @@ struct PlayerView: View {
 
     @ViewBuilder
     private var debugCard: some View {
-        if !controller.debugStatus.isEmpty {
+        if hasLastFMStatus {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
                     Image(systemName: "dot.radiowaves.left.and.right")
@@ -255,10 +256,40 @@ struct PlayerView: View {
                         .foregroundStyle(CloudTheme.ink)
                 }
 
-                Text(controller.debugStatus)
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(3)
+                if !controller.debugStatus.isEmpty {
+                    Text(controller.debugStatus)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(3)
+                }
+
+                if controller.pendingScrobbleCount > 0 {
+                    Text("\(controller.pendingScrobbleCount) pending scrobbles")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.warning)
+                        .lineLimit(1)
+                }
+
+                if let lastScrobbleSucceededAt = controller.lastScrobbleSucceededAt {
+                    Text("Last scrobble \(lastFMDateText(lastScrobbleSucceededAt))")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(1)
+                }
+
+                if let lastScrobbleError = controller.lastScrobbleError {
+                    Text(lastScrobbleError)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.warning)
+                        .lineLimit(3)
+                }
+
+                if controller.skippedUnplayableCount > 0 {
+                    Text("\(controller.skippedUnplayableCount) unplayable track\(controller.skippedUnplayableCount == 1 ? "" : "s") skipped")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.warning)
+                        .lineLimit(2)
+                }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -273,21 +304,54 @@ struct PlayerView: View {
         }
     }
 
-    private func artwork(for item: QueueItem, size: CGFloat = 184) -> some View {
-        AsyncImage(url: item.artworkURL) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(CloudTheme.elevatedStrong)
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(CloudTheme.sky)
-                    )
+    private var hasLastFMStatus: Bool {
+        !controller.debugStatus.isEmpty
+            || controller.pendingScrobbleCount > 0
+            || controller.lastScrobbleSucceededAt != nil
+            || controller.lastScrobbleError != nil
+            || controller.skippedUnplayableCount > 0
+    }
+
+    @ViewBuilder
+    private var scrobbleHistoryCard: some View {
+        if !controller.scrobbleHistory.isEmpty || controller.skippedUnplayableCount > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "list.bullet.clipboard")
+                        .foregroundStyle(CloudTheme.sky)
+                    Text("Scrobble Verlauf")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .foregroundStyle(CloudTheme.ink)
+
+                    Spacer()
+
+                    if !controller.scrobbleHistory.isEmpty {
+                        Button {
+                            controller.clearScrobbleHistory()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .buttonStyle(IconCircleButtonStyle())
+                        .accessibilityLabel("Clear scrobble history")
+                    }
+                }
+
+                if controller.scrobbleHistory.isEmpty {
+                    Text("Noch keine Last.fm Events in dieser Installation.")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                } else {
+                    ForEach(controller.scrobbleHistory.prefix(20)) { entry in
+                        ScrobbleHistoryRow(entry: entry)
+                    }
+                }
             }
+            .cloudCard()
         }
+    }
+
+    private func artwork(for item: QueueItem, size: CGFloat = 184) -> some View {
+        CachedArtworkImage(url: item.artworkURL, iconName: "music.note")
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
@@ -333,6 +397,10 @@ struct PlayerView: View {
     private func timeLabel(_ seconds: Double) -> String {
         let clamped = max(0, Int(seconds))
         return "\(clamped / 60):\(String(format: "%02d", clamped % 60))"
+    }
+
+    private func lastFMDateText(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
     }
 }
 
@@ -405,16 +473,7 @@ private struct QueueItemRow: View {
     }
 
     private var queueArtwork: some View {
-        AsyncImage(url: item.artworkURL) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(CloudTheme.elevatedStrong)
-                    .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
-            }
-        }
+        CachedArtworkImage(url: item.artworkURL, iconName: "music.note", maxPixelSize: 160)
         .frame(width: 44, height: 44)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
@@ -426,16 +485,7 @@ private struct RecentlyPlayedRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            AsyncImage(url: track.artworkURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(CloudTheme.elevatedStrong)
-                        .overlay(Image(systemName: "clock").foregroundStyle(CloudTheme.sky))
-                }
-            }
+            CachedArtworkImage(url: track.artworkURL, iconName: "clock", maxPixelSize: 160)
             .frame(width: 42, height: 42)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -463,6 +513,89 @@ private struct RecentlyPlayedRow: View {
             .accessibilityLabel("Play \(track.title)")
         }
         .padding(.vertical, 5)
+    }
+}
+
+private struct ScrobbleHistoryRow: View {
+    let entry: ScrobbleHistoryEntry
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(color.opacity(0.15)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.title)
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
+                    .lineLimit(1)
+                Text(detailText)
+                    .font(.system(.caption2, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(entry.occurredAt.formatted(date: .omitted, time: .shortened))
+                .font(.system(.caption2, design: .rounded).weight(.bold))
+                .foregroundStyle(CloudTheme.muted)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var detailText: String {
+        var value = "\(entry.artist) - \(eventTitle)"
+        if let message = entry.message, !message.isEmpty {
+            value += " - \(message)"
+        }
+        return value
+    }
+
+    private var eventTitle: String {
+        switch entry.event {
+        case .nowPlaying:
+            return "Now Playing"
+        case .scrobbled:
+            return "Gesendet"
+        case .queued:
+            return "Queued"
+        case .failed:
+            return "Fehler"
+        case .skipped:
+            return "Skipped"
+        }
+    }
+
+    private var iconName: String {
+        switch entry.event {
+        case .nowPlaying:
+            return "dot.radiowaves.left.and.right"
+        case .scrobbled:
+            return "checkmark.circle.fill"
+        case .queued:
+            return "tray.and.arrow.down.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        case .skipped:
+            return "forward.end.fill"
+        }
+    }
+
+    private var color: Color {
+        switch entry.event {
+        case .nowPlaying:
+            return CloudTheme.sky
+        case .scrobbled:
+            return CloudTheme.success
+        case .queued:
+            return CloudTheme.amber
+        case .failed, .skipped:
+            return CloudTheme.warning
+        }
     }
 }
 

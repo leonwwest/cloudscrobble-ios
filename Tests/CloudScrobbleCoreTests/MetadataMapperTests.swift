@@ -91,4 +91,52 @@ final class MetadataMapperTests: XCTestCase {
         XCTAssertEqual(mapped.artist, "Artist")
         XCTAssertEqual(mapped.track, "Track - Remix")
     }
+
+    func testTrackIdentityDeduplicatesSameSongAcrossDifferentUploaders() {
+        let firstUploader = SCUser(urn: "soundcloud:users:1", username: "repost-channel", permalink: nil, permalinkURL: nil, avatarURL: nil)
+        let secondUploader = SCUser(urn: "soundcloud:users:2", username: "another-channel", permalink: nil, permalinkURL: nil, avatarURL: nil)
+        let first = SCTrack(
+            urn: "soundcloud:tracks:1",
+            title: "Uploader title should be ignored",
+            durationMs: 180_000,
+            artworkURL: nil,
+            permalinkURL: URL(string: "https://soundcloud.com/repost/song")!,
+            user: firstUploader,
+            publisherMetadata: SCPublisherMetadata(artist: "Main Artist", releaseTitle: "Cloud Song"),
+            access: nil
+        )
+        let second = SCTrack(
+            urn: "soundcloud:tracks:2",
+            title: "Main Artist - Cloud Song [FREE DOWNLOAD]",
+            durationMs: 183_000,
+            artworkURL: nil,
+            permalinkURL: URL(string: "https://soundcloud.com/another/song")!,
+            user: secondUploader,
+            publisherMetadata: nil,
+            access: nil
+        )
+
+        let unique = TrackIdentity.uniqueTracks([first, second])
+
+        XCTAssertEqual(unique.map(\.urn), ["soundcloud:tracks:1"])
+    }
+
+    func testTrackIdentityDisplayMetadataUsesMainArtistInsteadOfUploader() {
+        let user = SCUser(urn: "soundcloud:users:1", username: "third-party-uploader", permalink: nil, permalinkURL: nil, avatarURL: nil)
+        let track = SCTrack(
+            urn: "soundcloud:tracks:1",
+            title: "ignored",
+            durationMs: 180_000,
+            artworkURL: nil,
+            permalinkURL: nil,
+            user: user,
+            publisherMetadata: SCPublisherMetadata(artist: "Main Artist", releaseTitle: "Cloud Song"),
+            access: nil
+        )
+
+        let metadata = TrackIdentity.displayMetadata(for: track)
+
+        XCTAssertEqual(metadata.artist, "Main Artist")
+        XCTAssertEqual(metadata.track, "Cloud Song")
+    }
 }

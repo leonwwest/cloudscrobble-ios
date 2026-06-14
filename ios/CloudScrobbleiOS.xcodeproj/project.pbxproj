@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 421CA9E7D7C63273891A7A09 /* ContentView.swift */; };
 		093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB5DB08037BF4EF1CF0F9B9 /* AppSessionViewModel.swift */; };
+		1C0C7A6A1F6E4B0B9D02A110 /* CachedArtworkImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */; };
 		237D2BF4E5F124D6DEE8AD1C /* LastFMTasteTrackResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA24D60C9674EEFB772D3381 /* LastFMTasteTrackResolver.swift */; };
 		5ED8CE2C14E39498DC319917 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */; };
 		648052C470E4682C2CF3FCA9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0081E85A5E455368AC42AF4 /* Assets.xcassets */; };
@@ -28,6 +29,7 @@
 /* Begin PBXFileReference section */
 		1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemBrowserClient.swift; sourceTree = "<group>"; };
 		1F9B161067FCB19C11C1C896 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
+		1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedArtworkImage.swift; sourceTree = "<group>"; };
 		421CA9E7D7C63273891A7A09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		52DA9610699F6681CE8BC048 /* CloudScrobble.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CloudScrobble.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FBFAE71534475A1934D4817 /* CloudScrobble */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudScrobble; path = ..; sourceTree = SOURCE_ROOT; };
@@ -143,6 +145,7 @@
 		B517A83A594D8148BB9702D5 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */,
 				421CA9E7D7C63273891A7A09 /* ContentView.swift */,
 				BF1163495C1B831CFB2412ED /* DesignSystem.swift */,
 				CD4B6C997767C3C1E1C8C196 /* HomeView.swift */,
@@ -239,6 +242,7 @@
 			files = (
 				D2E2FEAEF21272792DD77D29 /* AppConfig.swift in Sources */,
 				093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */,
+				1C0C7A6A1F6E4B0B9D02A110 /* CachedArtworkImage.swift in Sources */,
 				A14FD17852DD568885D94287 /* CloudScrobbleApplication.swift in Sources */,
 				040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */,
 				ABCF9277938E5E472C8E50E1 /* DesignSystem.swift in Sources */,

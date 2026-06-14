@@ -1,5 +1,6 @@
 import CloudScrobbleCore
 import Foundation
+import Network
 
 @MainActor
 final class AppSessionViewModel: ObservableObject {
@@ -9,11 +10,29 @@ final class AppSessionViewModel: ObservableObject {
         let redirectURI: String
     }
 
+    private struct PlaybackStartResult {
+        let remainingTracks: [SCTrack]
+        let loadedCount: Int
+        let skippedCount: Int
+    }
+
+    private struct QueueResolveBatch {
+        let items: [QueueItem]
+        let skippedCount: Int
+    }
+
+    private static let initialPlaybackBufferSize = 4
+    private static let initialPlaybackScanLimit = 16
+    private static let queueFillBatchSize = 6
+    private static let prefetchWindowSize = 10
+
     @Published var soundCloudConnected = false
     @Published var soundCloudPublicMode = false
     @Published var soundCloudMockMode = false
     @Published var lastFMConnected = false
     @Published var isBusy = false
+    @Published var isNetworkReachable = true
+    @Published var networkStatusLabel = "Online"
     @Published var statusMessage: String? {
         didSet {
             scheduleStatusDismissal(for: statusMessage)
@@ -42,6 +61,8 @@ final class AppSessionViewModel: ObservableObject {
     private var queueFillGeneration = UUID()
     private var cachedLastFMTasteTracks: [SCTrack]?
     private var didAttemptPlaybackRestore = false
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "CloudScrobble.NetworkMonitor")
 
     init(config: AppConfig? = AppConfig.load()) {
         self.config = config
@@ -106,6 +127,14 @@ final class AppSessionViewModel: ObservableObject {
         Task {
             await refreshConnectionState()
         }
+
+        startNetworkMonitoring()
+    }
+
+    deinit {
+        statusDismissalTask?.cancel()
+        queueFillTask?.cancel()
+        networkMonitor.cancel()
     }
 
     var isConfigured: Bool {
@@ -189,6 +218,7 @@ final class AppSessionViewModel: ObservableObject {
         let hasLastFMSession = await lastFMAuthService.cachedSession() != nil
         lastFMConnected = hasLastFMSession
         playerController.setLastFMScrobbler(hasLastFMSession ? lastFMScrobbleService : nil)
+        await playerController.refreshLastFMDiagnostics()
 
         await restoreSavedPlaybackIfPossible()
     }
@@ -318,6 +348,7 @@ final class AppSessionViewModel: ObservableObject {
             playerController.setLastFMScrobbler(lastFMScrobbleService)
             try await lastFMScrobbleService.flushPendingScrobbles()
             let pending = await lastFMScrobbleService.pendingScrobbleCount()
+            await playerController.refreshLastFMDiagnostics()
             lastFMConnected = true
             cachedLastFMTasteTracks = nil
             statusMessage = pending == 0 ? "Last.fm connected" : "Last.fm connected (\(pending) pending scrobbles)"
@@ -343,6 +374,11 @@ final class AppSessionViewModel: ObservableObject {
         lastFMConnected = false
         cachedLastFMTasteTracks = nil
         playerController.setLastFMScrobbler(nil)
+    }
+
+    func retryPendingLastFMScrobbles() async {
+        guard lastFMConnected else { return }
+        await playerController.flushPendingLastFMScrobbles()
     }
 
     func play(track: SCTrack) async {
@@ -391,16 +427,23 @@ final class AppSessionViewModel: ObservableObject {
             maxQueueLength: maxQueueLength
         )
 
+        let generation = UUID()
+        queueFillGeneration = generation
+
         do {
-            var queueItems: [QueueItem] = []
-            queueItems.reserveCapacity(boundedQueue.tracks.count)
-
-            for track in boundedQueue.tracks {
-                queueItems.append(try await makeQueueItem(for: track, resolver: playbackResolver))
-            }
-
-            playerController.loadQueue(queueItems, startAt: boundedQueue.startAt)
-            statusMessage = "Loaded \(queueItems.count) tracks"
+            let startResult = try await startProgressivePlaylistPlayback(
+                tracks: boundedQueue.tracks,
+                startAt: boundedQueue.startAt,
+                resolver: playbackResolver,
+                generation: generation
+            )
+            startQueueFillTask(
+                tracks: startResult.remainingTracks,
+                resolver: playbackResolver,
+                generation: generation,
+                loadedCount: startResult.loadedCount,
+                skippedCount: startResult.skippedCount
+            )
         } catch {
             statusMessage = "Queue loading failed: \(error.localizedDescription)"
         }
@@ -433,18 +476,20 @@ final class AppSessionViewModel: ObservableObject {
             if !page.collection.isEmpty {
                 let generation = UUID()
                 queueFillGeneration = generation
-                let remaining = try await startProgressivePlaylistPlayback(
+                let startResult = try await startProgressivePlaylistPlayback(
                     tracks: page.collection,
                     startAt: 0,
                     resolver: playbackResolver,
                     generation: generation
                 )
                 startPlaylistPageQueueFill(
-                    initialTracks: remaining,
+                    initialTracks: startResult.remainingTracks,
                     playlistURN: playlist.urn,
                     nextHref: page.nextHref,
                     resolver: playbackResolver,
-                    generation: generation
+                    generation: generation,
+                    loadedCount: startResult.loadedCount,
+                    skippedCount: startResult.skippedCount
                 )
                 return
             }
@@ -644,16 +689,18 @@ final class AppSessionViewModel: ObservableObject {
         queueFillGeneration = generation
 
         do {
-            let remaining = try await startProgressivePlaylistPlayback(
+            let startResult = try await startProgressivePlaylistPlayback(
                 tracks: tracks,
                 startAt: startAt,
                 resolver: playbackResolver,
                 generation: generation
             )
             startQueueFillTask(
-                tracks: remaining,
+                tracks: startResult.remainingTracks,
                 resolver: playbackResolver,
-                generation: generation
+                generation: generation,
+                loadedCount: startResult.loadedCount,
+                skippedCount: startResult.skippedCount
             )
         } catch {
             statusMessage = "Queue loading failed: \(error.localizedDescription)"
@@ -665,26 +712,44 @@ final class AppSessionViewModel: ObservableObject {
         startAt: Int,
         resolver: PlaybackResolving,
         generation: UUID
-    ) async throws -> [SCTrack] {
+    ) async throws -> PlaybackStartResult {
         guard !tracks.isEmpty else {
             statusMessage = "No playable tracks"
-            return []
+            return PlaybackStartResult(remainingTracks: [], loadedCount: 0, skippedCount: 0)
         }
 
         let playbackOrder = playlistPlaybackOrder(tracks: tracks, startAt: startAt)
-        guard let firstTrack = playbackOrder.first else {
+        guard !playbackOrder.isEmpty else {
             statusMessage = "No playable tracks"
-            return []
+            return PlaybackStartResult(remainingTracks: [], loadedCount: 0, skippedCount: 0)
         }
 
-        let firstItem = try await makeQueueItem(for: firstTrack, resolver: resolver)
-        guard queueFillGeneration == generation else { return [] }
+        let prepared = await prepareInitialPlaybackQueue(
+            from: playbackOrder,
+            resolver: resolver
+        )
+        guard !prepared.items.isEmpty else {
+            throw CloudScrobbleError.unsupportedStream
+        }
+        guard queueFillGeneration == generation else {
+            return PlaybackStartResult(remainingTracks: [], loadedCount: 0, skippedCount: prepared.skippedCount)
+        }
 
-        playerController.loadQueue([firstItem], startAt: 0)
-        statusMessage = playbackOrder.count == 1
-            ? "Playing \(firstTrack.title)"
-            : "Playing \(firstTrack.title). Loading queue..."
-        return Array(playbackOrder.dropFirst())
+        playerController.loadQueue(prepared.items, startAt: 0)
+        let upcomingTrackURNs = prepared.remainingTracks.prefix(Self.prefetchWindowSize).map(\.urn)
+        Task {
+            await resolver.prefetchPlayableStreams(for: Array(upcomingTrackURNs))
+        }
+        let firstTitle = prepared.items.first?.title ?? "track"
+        let skippedText = prepared.skippedCount == 0 ? "" : " (\(prepared.skippedCount) skipped)"
+        statusMessage = prepared.remainingTracks.isEmpty
+            ? "Playing \(firstTitle). Buffered \(prepared.items.count) track\(prepared.items.count == 1 ? "" : "s")\(skippedText)"
+            : "Playing \(firstTitle). Buffered \(prepared.items.count), loading more\(skippedText)"
+        return PlaybackStartResult(
+            remainingTracks: prepared.remainingTracks,
+            loadedCount: prepared.items.count,
+            skippedCount: prepared.skippedCount
+        )
     }
 
     private func playlistPlaybackOrder(tracks: [SCTrack], startAt: Int) -> [SCTrack] {
@@ -697,20 +762,30 @@ final class AppSessionViewModel: ObservableObject {
     private func startQueueFillTask(
         tracks: [SCTrack],
         resolver: PlaybackResolving,
-        generation: UUID
+        generation: UUID,
+        loadedCount initialLoadedCount: Int,
+        skippedCount initialSkippedCount: Int
     ) {
         guard !tracks.isEmpty else { return }
 
         queueFillTask = Task { [weak self, tracks, resolver, generation] in
-            var loadedCount = 1
-            var skippedCount = 0
+            var loadedCount = initialLoadedCount
+            var skippedCount = initialSkippedCount
+            var offset = 0
 
-            for track in tracks {
+            while offset < tracks.count {
                 guard !Task.isCancelled else { return }
+                let upperBound = min(tracks.count, offset + Self.queueFillBatchSize)
+                let batchTracks = Array(tracks[offset..<upperBound])
+                let batch = await Self.resolveQueueItems(
+                    for: batchTracks,
+                    resolver: resolver
+                )
+                offset = upperBound
+                skippedCount += batch.skippedCount
 
-                do {
-                    let item = try await self?.makeQueueItem(for: track, resolver: resolver)
-                    guard let item, !Task.isCancelled else { return }
+                for item in batch.items {
+                    guard !Task.isCancelled else { return }
                     let shouldContinue = await MainActor.run { [weak self] in
                         guard let self, self.queueFillGeneration == generation else { return false }
                         self.playerController.appendToQueue(item, showDebug: false)
@@ -718,8 +793,6 @@ final class AppSessionViewModel: ObservableObject {
                     }
                     guard shouldContinue else { return }
                     loadedCount += 1
-                } catch {
-                    skippedCount += 1
                 }
             }
 
@@ -740,24 +813,34 @@ final class AppSessionViewModel: ObservableObject {
         playlistURN: String,
         nextHref: URL?,
         resolver: PlaybackResolving,
-        generation: UUID
+        generation: UUID,
+        loadedCount initialLoadedCount: Int,
+        skippedCount initialSkippedCount: Int
     ) {
         guard !initialTracks.isEmpty || nextHref != nil else { return }
         guard let api = apiClient else { return }
 
         queueFillTask = Task { [weak self, api, initialTracks, playlistURN, nextHref, resolver, generation] in
-            var loadedCount = 1
-            var skippedCount = 0
+            var loadedCount = initialLoadedCount
+            var skippedCount = initialSkippedCount
             var tracksToAppend = initialTracks
             var nextPageHref = nextHref
 
             while true {
-                for track in tracksToAppend {
+                var offset = 0
+                while offset < tracksToAppend.count {
                     guard !Task.isCancelled else { return }
+                    let upperBound = min(tracksToAppend.count, offset + Self.queueFillBatchSize)
+                    let batchTracks = Array(tracksToAppend[offset..<upperBound])
+                    let batch = await Self.resolveQueueItems(
+                        for: batchTracks,
+                        resolver: resolver
+                    )
+                    offset = upperBound
+                    skippedCount += batch.skippedCount
 
-                    do {
-                        let item = try await self?.makeQueueItem(for: track, resolver: resolver)
-                        guard let item, !Task.isCancelled else { return }
+                    for item in batch.items {
+                        guard !Task.isCancelled else { return }
                         let shouldContinue = await MainActor.run { [weak self] in
                             guard let self, self.queueFillGeneration == generation else { return false }
                             self.playerController.appendToQueue(item, showDebug: false)
@@ -765,8 +848,6 @@ final class AppSessionViewModel: ObservableObject {
                         }
                         guard shouldContinue else { return }
                         loadedCount += 1
-                    } catch {
-                        skippedCount += 1
                     }
                 }
 
@@ -827,6 +908,77 @@ final class AppSessionViewModel: ObservableObject {
     }
 
     private nonisolated func makeQueueItem(
+        for track: SCTrack,
+        resolver: PlaybackResolving
+    ) async throws -> QueueItem {
+        try await Self.makeQueueItem(for: track, resolver: resolver)
+    }
+
+    private func prepareInitialPlaybackQueue(
+        from playbackOrder: [SCTrack],
+        resolver: PlaybackResolving
+    ) async -> (items: [QueueItem], remainingTracks: [SCTrack], skippedCount: Int) {
+        var items: [QueueItem] = []
+        var skippedCount = 0
+        var offset = 0
+        let scanLimit = min(playbackOrder.count, Self.initialPlaybackScanLimit)
+
+        while items.count < Self.initialPlaybackBufferSize, offset < playbackOrder.count {
+            let remainingScanBudget = max(0, scanLimit - offset)
+            guard remainingScanBudget > 0 || items.isEmpty else { break }
+
+            let batchSize = items.isEmpty
+                ? min(Self.queueFillBatchSize, max(1, remainingScanBudget))
+                : min(Self.queueFillBatchSize, playbackOrder.count - offset)
+            let upperBound = min(playbackOrder.count, offset + batchSize)
+            let batchTracks = Array(playbackOrder[offset..<upperBound])
+            let batch = await Self.resolveQueueItems(for: batchTracks, resolver: resolver)
+            items.append(contentsOf: batch.items)
+            skippedCount += batch.skippedCount
+            offset = upperBound
+
+            if offset >= scanLimit, items.isEmpty {
+                break
+            }
+        }
+
+        return (
+            items,
+            offset < playbackOrder.count ? Array(playbackOrder[offset...]) : [],
+            skippedCount
+        )
+    }
+
+    private nonisolated static func resolveQueueItems(
+        for tracks: [SCTrack],
+        resolver: PlaybackResolving
+    ) async -> QueueResolveBatch {
+        guard !tracks.isEmpty else {
+            return QueueResolveBatch(items: [], skippedCount: 0)
+        }
+
+        var resolved = Array<QueueItem?>(repeating: nil, count: tracks.count)
+
+        await withTaskGroup(of: (Int, QueueItem?).self) { group in
+            for (index, track) in tracks.enumerated() {
+                group.addTask {
+                    let item = try? await makeQueueItem(for: track, resolver: resolver)
+                    return (index, item)
+                }
+            }
+
+            for await (index, item) in group {
+                resolved[index] = item
+            }
+        }
+
+        return QueueResolveBatch(
+            items: resolved.compactMap { $0 },
+            skippedCount: resolved.filter { $0 == nil }.count
+        )
+    }
+
+    private nonisolated static func makeQueueItem(
         for track: SCTrack,
         resolver: PlaybackResolving
     ) async throws -> QueueItem {
@@ -904,6 +1056,37 @@ final class AppSessionViewModel: ObservableObject {
 
     private func statusDismissalDelay(for message: String) -> UInt64 {
         message.isLikelyErrorStatus ? 5_500_000_000 : 2_800_000_000
+    }
+
+    private func startNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let isReachable = path.status == .satisfied
+            let label: String
+            if !isReachable {
+                label = "Offline"
+            } else if path.usesInterfaceType(.wifi) {
+                label = "Wi-Fi"
+            } else if path.usesInterfaceType(.cellular) {
+                label = "Cellular"
+            } else {
+                label = "Online"
+            }
+
+            Task { @MainActor [weak self, isReachable, label] in
+                guard let self else { return }
+                let wasReachable = self.isNetworkReachable
+                self.isNetworkReachable = isReachable
+                self.networkStatusLabel = label
+
+                if wasReachable, !isReachable {
+                    self.statusMessage = "Offline: cached data remains available."
+                } else if !wasReachable, isReachable {
+                    self.statusMessage = "Back online"
+                    await self.retryPendingLastFMScrobbles()
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
     }
 
     private func activateRealMode(isPublicMode: Bool) {

@@ -69,18 +69,7 @@ public final class ScrobbleEngine {
             return []
         }
 
-        defer {
-            previousPlaybackTime = playbackTime
-        }
-
-        if let previousPlaybackTime {
-            let rawDelta = playbackTime - previousPlaybackTime
-            if rawDelta > 0 {
-                // Ignore large jumps caused by seeking.
-                let clampedDelta = min(rawDelta, 2.5)
-                state.listenedSeconds += clampedDelta
-            }
-        }
+        recordListenedTime(playbackTime: playbackTime)
 
         guard state.listenedSeconds >= thresholdSeconds,
               let startedAt = state.trackStartedAtUnix else {
@@ -89,5 +78,40 @@ public final class ScrobbleEngine {
 
         state.didScrobble = true
         return [.sendScrobble(meta: currentTrack.lastFM, timestamp: startedAt)]
+    }
+
+    public func finish(playbackTime: TimeInterval) -> [ScrobbleEngineEvent] {
+        guard let currentTrack,
+              let thresholdSeconds,
+              !state.didScrobble,
+              !isPaused else {
+            previousPlaybackTime = playbackTime
+            return []
+        }
+
+        recordListenedTime(playbackTime: playbackTime)
+
+        guard state.listenedSeconds >= thresholdSeconds,
+              let startedAt = state.trackStartedAtUnix else {
+            return []
+        }
+
+        state.didScrobble = true
+        return [.sendScrobble(meta: currentTrack.lastFM, timestamp: startedAt)]
+    }
+
+    private func recordListenedTime(playbackTime: TimeInterval) {
+        defer {
+            previousPlaybackTime = playbackTime
+        }
+
+        guard let previousPlaybackTime else { return }
+
+        let rawDelta = playbackTime - previousPlaybackTime
+        if rawDelta > 0 {
+            // Ignore large jumps caused by seeking.
+            let clampedDelta = min(rawDelta, 2.5)
+            state.listenedSeconds += clampedDelta
+        }
     }
 }

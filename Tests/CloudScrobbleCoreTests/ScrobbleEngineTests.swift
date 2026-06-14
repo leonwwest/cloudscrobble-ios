@@ -58,6 +58,40 @@ final class ScrobbleEngineTests: XCTestCase {
         }))
     }
 
+    func testFinishScrobblesWhenTrackEndsAfterLastTimerTick() {
+        let engine = ScrobbleEngine()
+        _ = engine.start(track: makeQueueItem(duration: 300), startedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        var events: [ScrobbleEngineEvent] = []
+        for t in stride(from: 0.0, through: 149.0, by: 1.0) {
+            events.append(contentsOf: engine.tick(playbackTime: t))
+        }
+
+        XCTAssertFalse(events.contains(where: {
+            if case .sendScrobble = $0 { return true }
+            return false
+        }))
+
+        let finishEvents = engine.finish(playbackTime: 300)
+
+        XCTAssertTrue(finishEvents.contains(where: {
+            if case .sendScrobble(_, let timestamp) = $0 {
+                return timestamp == 1_700_000_000
+            }
+            return false
+        }))
+    }
+
+    func testFinishDoesNotTreatSeekToEndAsListenedTime() {
+        let engine = ScrobbleEngine()
+        _ = engine.start(track: makeQueueItem(duration: 300), startedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        _ = engine.tick(playbackTime: 1)
+        let finishEvents = engine.finish(playbackTime: 300)
+
+        XCTAssertTrue(finishEvents.isEmpty)
+    }
+
     private func makeQueueItem(duration: Int) -> QueueItem {
         QueueItem(
             trackURN: "soundcloud:tracks:1",

@@ -9,12 +9,15 @@ struct ContentView: View {
         case player
     }
 
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var session = AppSessionViewModel()
+    @AppStorage("cloudscrobble.didShowOnboarding.v1") private var didShowOnboarding = false
 
     @State private var lastFMUsername = ""
     @State private var lastFMPassword = ""
     @State private var showLastFMSheet = false
     @State private var showSettingsSheet = false
+    @State private var showOnboardingSheet = false
     @State private var deckVisible = false
     @State private var pendingLastFMScrobbles = 0
     @State private var selectedTab: AppTab = .home
@@ -86,6 +89,9 @@ struct ContentView: View {
         .sheet(isPresented: $showSettingsSheet) {
             settingsSheet
         }
+        .sheet(isPresented: $showOnboardingSheet) {
+            onboardingSheet
+        }
         .task {
             await session.refreshConnectionState()
         }
@@ -93,10 +99,21 @@ struct ContentView: View {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.84)) {
                 deckVisible = true
             }
+            if !didShowOnboarding {
+                didShowOnboarding = true
+                showOnboardingSheet = true
+            }
         }
         .onOpenURL { url in
             Task {
                 await session.handleIncomingOAuthCallback(url)
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await session.retryPendingLastFMScrobbles()
+                await refreshDiagnostics()
             }
         }
     }
@@ -135,6 +152,7 @@ struct ContentView: View {
             HStack(spacing: 7) {
                 StatusBadge(title: session.soundCloudMockMode ? "Demo" : "SoundCloud", isConnected: session.soundCloudConnected)
                 StatusBadge(title: "Last.fm", isConnected: session.lastFMConnected)
+                StatusBadge(title: session.networkStatusLabel, isConnected: session.isNetworkReachable)
                 Spacer(minLength: 0)
             }
 
@@ -267,7 +285,14 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         SettingsInfoRow(title: "SoundCloud", value: session.soundCloudModeLabel)
                         SettingsInfoRow(title: "Last.fm", value: session.lastFMConnected ? "Connected" : "Off")
+                        SettingsInfoRow(title: "Network", value: session.networkStatusLabel)
                         SettingsInfoRow(title: "Pending scrobbles", value: "\(pendingLastFMScrobbles)")
+                        if let lastScrobbleSucceededAt = session.playerController.lastScrobbleSucceededAt {
+                            SettingsInfoRow(title: "Last scrobble", value: scrobbleDateText(lastScrobbleSucceededAt))
+                        }
+                        if let lastScrobbleError = session.playerController.lastScrobbleError {
+                            SettingsInfoRow(title: "Last.fm error", value: lastScrobbleError)
+                        }
                         SettingsInfoRow(title: "Worker", value: session.tokenBrokerDisplayURL)
                     }
                     .cloudCard()
@@ -382,6 +407,68 @@ struct ContentView: View {
         .presentationDetents([.medium, .large])
     }
 
+    private var onboardingSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CloudScrobble einrichten")
+                            .font(.system(.title2, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                        Text("Verbinde SoundCloud fürs echte Playback und Last.fm für Now Playing plus Scrobbles.")
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.muted)
+                            .lineSpacing(2)
+                    }
+                    .cloudCard()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Verbindungen")
+                            .font(.system(.headline, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.ink)
+                        connectionActions
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .cloudCard()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SettingsInfoRow(title: "Feed", value: "Du kannst Tracks ausblenden und Artists boosten oder reduzieren.")
+                        SettingsInfoRow(title: "Scrobbles", value: "Im Player siehst du gesendete, queued und fehlgeschlagene Events.")
+                        SettingsInfoRow(title: "Offline", value: "Die App zeigt Netzwerkstatus und cached Cover im Feed.")
+                    }
+                    .cloudCard()
+
+                    Button {
+                        showOnboardingSheet = false
+                    } label: {
+                        Label("Loslegen", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(PrimaryPillButtonStyle())
+                }
+                .padding(16)
+            }
+            .background(CloudBackdrop())
+            .navigationTitle("Setup")
+            .cloudInlineNavigationTitle()
+            .toolbar {
+#if os(iOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") {
+                        showOnboardingSheet = false
+                    }
+                }
+#else
+                ToolbarItem {
+                    Button("Close") {
+                        showOnboardingSheet = false
+                    }
+                }
+#endif
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
     private var lastFMSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
@@ -458,7 +545,12 @@ struct ContentView: View {
     }
 
     private func refreshDiagnostics() async {
+        await session.playerController.refreshLastFMDiagnostics()
         pendingLastFMScrobbles = await session.pendingLastFMScrobbleCount()
+    }
+
+    private func scrobbleDateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
@@ -469,16 +561,7 @@ private struct MiniPlayerBar: View {
     var body: some View {
         if let item = controller.currentItem {
             HStack(spacing: 10) {
-                AsyncImage(url: item.artworkURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(CloudTheme.elevatedStrong)
-                            .overlay(Image(systemName: "music.note").foregroundStyle(CloudTheme.sky))
-                    }
-                }
+                CachedArtworkImage(url: item.artworkURL, iconName: "music.note", maxPixelSize: 180)
                 .frame(width: 46, height: 46)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -490,6 +573,10 @@ private struct MiniPlayerBar: View {
                     Text(item.artistDisplay)
                         .font(.system(.caption2, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(1)
+                    Text(miniStatusText)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(controller.lastScrobbleError == nil ? CloudTheme.seafoam : CloudTheme.warning)
                         .lineLimit(1)
                 }
                 .contentShape(Rectangle())
@@ -527,6 +614,21 @@ private struct MiniPlayerBar: View {
             .onTapGesture(perform: onOpenPlayer)
             .accessibilityLabel("Open player")
         }
+    }
+
+    private var miniStatusText: String {
+        var parts: [String] = []
+        if let currentIndex = controller.currentIndex, !controller.queue.isEmpty {
+            parts.append("\(currentIndex + 1)/\(controller.queue.count)")
+        }
+        if controller.pendingScrobbleCount > 0 {
+            parts.append("\(controller.pendingScrobbleCount) pending")
+        } else if controller.lastScrobbleError != nil {
+            parts.append("Scrobble error")
+        } else if controller.lastScrobbleSucceededAt != nil {
+            parts.append("Scrobble OK")
+        }
+        return parts.isEmpty ? "Ready" : parts.joined(separator: " - ")
     }
 }
 

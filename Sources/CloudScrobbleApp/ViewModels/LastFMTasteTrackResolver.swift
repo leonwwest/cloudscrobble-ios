@@ -53,10 +53,7 @@ enum LastFMTasteTrackResolver {
     }
 
     private static func uniqueTracks(_ tracks: [SCTrack]) -> [SCTrack] {
-        var seen = Set<String>()
-        return tracks.filter { track in
-            seen.insert(track.id).inserted
-        }
+        TrackIdentity.uniqueTracks(tracks)
     }
 
     private static func uniqueQueries(_ queries: [String]) -> [String] {

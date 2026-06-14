@@ -5,6 +5,13 @@ import Foundation
 final class HomeViewModel: ObservableObject {
     private enum Storage {
         static let cachedHomeKey = "cloudscrobble.cachedHome.v2"
+        static let feedFeedbackKey = "cloudscrobble.feedFeedback.v1"
+    }
+
+    private struct FeedFeedback: Codable {
+        var hiddenTrackKeys: Set<String> = []
+        var mutedArtistKeys: Set<String> = []
+        var boostedArtistKeys: Set<String> = []
     }
 
     private struct CachedHome: Codable {
@@ -51,12 +58,19 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var selectedMix: HomeMix?
     @Published private(set) var isLoading = false
     @Published private(set) var isLoadingPlaylist = false
+    @Published private(set) var isLoadingMoreFeed = false
+    @Published private(set) var canLoadMoreFeed = false
+    @Published private(set) var feedbackSummary: String?
     @Published private(set) var message: String?
 
     private weak var session: AppSessionViewModel?
+    private var feedTrackNextHref: URL?
+    private var feedActivityNextHref: URL?
+    private var feedback: FeedFeedback
 
     init(session: AppSessionViewModel) {
         self.session = session
+        self.feedback = Self.loadFeedFeedback()
         restoreCachedHome()
     }
 
@@ -114,6 +128,82 @@ final class HomeViewModel: ObservableObject {
         }
 
         await session.addToQueue(track: track)
+    }
+
+    func hide(track: SCTrack) {
+        feedback.hiddenTrackKeys.insert(TrackIdentity.canonicalKey(for: track))
+        persistFeedFeedback()
+        removeTrackFromVisibleHome(track)
+        feedbackSummary = "Track hidden from Start"
+    }
+
+    func lessLike(track: SCTrack) {
+        feedback.mutedArtistKeys.insert(Self.artistKey(for: track))
+        feedback.boostedArtistKeys.remove(Self.artistKey(for: track))
+        persistFeedFeedback()
+        rebuildVisibleHomeAfterFeedback()
+        feedbackSummary = "Showing less from \(TrackIdentity.displayMetadata(for: track).artist)"
+    }
+
+    func moreLike(track: SCTrack) {
+        feedback.boostedArtistKeys.insert(Self.artistKey(for: track))
+        feedback.mutedArtistKeys.remove(Self.artistKey(for: track))
+        persistFeedFeedback()
+        rebuildVisibleHomeAfterFeedback()
+        feedbackSummary = "Prioritizing \(TrackIdentity.displayMetadata(for: track).artist)"
+    }
+
+    func resetFeedFeedback() {
+        feedback = FeedFeedback()
+        persistFeedFeedback()
+        rebuildVisibleHomeAfterFeedback()
+        feedbackSummary = "Feed feedback reset"
+    }
+
+    func loadMoreFeed() async {
+        guard !isLoadingMoreFeed, canLoadMoreFeed else { return }
+        guard let session, let api = session.apiClient else {
+            message = "Connect SoundCloud first"
+            return
+        }
+
+        isLoadingMoreFeed = true
+        defer { isLoadingMoreFeed = false }
+
+        var loadedTracks: [SCTrack] = []
+        var loadedPlaylists: [SCPlaylist] = []
+
+        if let nextHref = feedTrackNextHref {
+            if let page = try? await api.homeFeedTracks(limit: 50, nextHref: nextHref) {
+                loadedTracks.append(contentsOf: page.collection.compactMap(\.track))
+                feedTrackNextHref = page.nextHref
+            } else {
+                feedTrackNextHref = nil
+            }
+        }
+
+        if let nextHref = feedActivityNextHref {
+            if let page = try? await api.homeFeed(limit: 30, nextHref: nextHref) {
+                loadedTracks.append(contentsOf: page.collection.compactMap(\.track))
+                loadedPlaylists.append(contentsOf: page.collection.compactMap(\.playlist))
+                feedActivityNextHref = page.nextHref
+            } else {
+                feedActivityNextHref = nil
+            }
+        }
+
+        canLoadMoreFeed = feedTrackNextHref != nil || feedActivityNextHref != nil
+        guard !loadedTracks.isEmpty || !loadedPlaylists.isEmpty else {
+            message = canLoadMoreFeed ? "No new Start tracks on this page." : "Start feed fully loaded."
+            return
+        }
+
+        feedTracks = rankedDiverseTracks(feedTracks + loadedTracks + followingTracks, limit: feedTracks.count + 24, maxPerArtist: 2)
+        recommendedTracks = Self.uniqueTracks(recommendedTracks + applyFeedback(to: loadedTracks))
+        homePlaylists = Self.uniquePlaylists(homePlaylists + loadedPlaylists)
+        rebuildVisibleHomeAfterFeedback()
+        persistCachedHome()
+        message = loadedTracks.isEmpty ? "Loaded more playlists." : "Loaded \(loadedTracks.count) more Start tracks."
     }
 
     func play(mix: HomeMix) async {
@@ -269,6 +359,7 @@ final class HomeViewModel: ObservableObject {
         do {
             let trackActivities = try await api.homeFeedTracks(limit: 50, nextHref: nil)
             nextFeedTracks = Self.uniqueTracks(trackActivities.collection.compactMap(\.track))
+            feedTrackNextHref = trackActivities.nextHref
         } catch {
             errors.append("Start tracks")
         }
@@ -279,6 +370,7 @@ final class HomeViewModel: ObservableObject {
             let activityPlaylists = activities.collection.compactMap(\.playlist)
             nextFeedTracks = Self.uniqueTracks(nextFeedTracks + activityTracks)
             nextHomePlaylists = Self.uniquePlaylists(activityPlaylists + nextHomePlaylists)
+            feedActivityNextHref = activities.nextHref
         } catch {
             errors.append("Start feed")
         }
@@ -292,7 +384,7 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let likedTracksPage = try await api.myLikedTracks(limit: 50, nextHref: nil)
-            nextLikedTracks = likedTracksPage.collection
+            nextLikedTracks = Self.uniqueTracks(likedTracksPage.collection)
         } catch {
             errors.append("liked tracks")
         }
@@ -306,7 +398,7 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let followingTracksPage = try await api.myFollowingTracks(limit: 50, nextHref: nil)
-            nextFollowingTracks = followingTracksPage.collection
+            nextFollowingTracks = Self.uniqueTracks(followingTracksPage.collection)
         } catch {
             errors.append("following tracks")
         }
@@ -323,7 +415,11 @@ final class HomeViewModel: ObservableObject {
             maxPlaylists: 4,
             maxTracksPerPlaylist: 10
         )
-        let lastFMTasteTracks = await session?.lastFMTasteTracks(api: api, maxTracks: 72) ?? []
+        let lastFMTasteTracks = applyFeedback(to: await session?.lastFMTasteTracks(api: api, maxTracks: 72) ?? [])
+        nextMyTracks = applyFeedback(to: nextMyTracks)
+        nextFeedTracks = applyFeedback(to: nextFeedTracks)
+        nextFollowingTracks = applyFeedback(to: nextFollowingTracks)
+        nextLikedTracks = applyFeedback(to: nextLikedTracks)
 
         let seedTracks = Self.uniqueTracks(
             nextFeedTracks
@@ -345,9 +441,11 @@ final class HomeViewModel: ObservableObject {
         if nextFeedTracks.isEmpty {
             nextFeedTracks = nextLikedTracks
         }
-        if nextFeedTracks.count < 8 {
-            nextFeedTracks = Array(Self.uniqueTracks(nextFeedTracks + nextFollowingTracks + discoveryTracks).prefix(24))
-        }
+        nextFeedTracks = rankedDiverseTracks(
+            nextFeedTracks + nextFollowingTracks + discoveryTracks + stationTracks,
+            limit: 30,
+            maxPerArtist: 2
+        )
 
         let nextRecommended = Self.uniqueTracks(seedTracks + stationTracks + discoveryTracks)
 
@@ -373,6 +471,7 @@ final class HomeViewModel: ObservableObject {
         )
         selectedPlaylist = nil
         selectedMix = nil
+        canLoadMoreFeed = feedTrackNextHref != nil || feedActivityNextHref != nil
         persistCachedHome()
 
         if errors.isEmpty {
@@ -393,23 +492,24 @@ final class HomeViewModel: ObservableObject {
 
             me = nil
             myTracks = []
-            feedTracks = discovery.collection
+            feedTracks = applyFeedback(to: discovery.collection)
             followingTracks = []
-            recommendedTracks = tracks
+            recommendedTracks = applyFeedback(to: tracks)
             homePlaylists = playlists.collection
             likedTracks = []
             likedPlaylists = []
             homeMixes = Self.buildHomeMixes(
-                feedTracks: discovery.collection,
+                feedTracks: feedTracks,
                 followingTracks: [],
                 ownedTracks: [],
-                likedTracks: alternates.collection,
-                recommendedTracks: tracks,
+                likedTracks: applyFeedback(to: alternates.collection),
+                recommendedTracks: recommendedTracks,
                 username: nil
             )
-            stationMixes = Self.buildFallbackStationMixes(from: tracks)
+            stationMixes = Self.buildFallbackStationMixes(from: recommendedTracks)
             selectedPlaylist = nil
             selectedMix = nil
+            canLoadMoreFeed = false
             message = "Full SoundCloud login is needed for your personal Start. Showing public discovery."
         } catch {
             message = "Public Start loading failed: \(error.localizedDescription)"
@@ -542,6 +642,72 @@ final class HomeViewModel: ObservableObject {
         return detailedTracks
     }
 
+    private func applyFeedback(to tracks: [SCTrack]) -> [SCTrack] {
+        tracks.filter { track in
+            !feedback.hiddenTrackKeys.contains(TrackIdentity.canonicalKey(for: track))
+                && !feedback.mutedArtistKeys.contains(Self.artistKey(for: track))
+        }
+    }
+
+    private func rankedDiverseTracks(_ tracks: [SCTrack], limit: Int, maxPerArtist: Int) -> [SCTrack] {
+        let filtered = applyFeedback(to: tracks)
+        let ranked = filtered.sorted { lhs, rhs in
+            let lhsBoosted = feedback.boostedArtistKeys.contains(Self.artistKey(for: lhs))
+            let rhsBoosted = feedback.boostedArtistKeys.contains(Self.artistKey(for: rhs))
+            if lhsBoosted != rhsBoosted {
+                return lhsBoosted && !rhsBoosted
+            }
+            return false
+        }
+        return Self.diverseTracks(ranked, limit: limit, maxPerArtist: maxPerArtist)
+    }
+
+    private func removeTrackFromVisibleHome(_ track: SCTrack) {
+        let key = TrackIdentity.canonicalKey(for: track)
+        let remove: (SCTrack) -> Bool = { TrackIdentity.canonicalKey(for: $0) == key }
+        feedTracks.removeAll(where: remove)
+        followingTracks.removeAll(where: remove)
+        recommendedTracks.removeAll(where: remove)
+        likedTracks.removeAll(where: remove)
+        homeMixes = homeMixes.map { mix in
+            HomeMix(
+                id: mix.id,
+                title: mix.title,
+                subtitle: mix.subtitle,
+                tracks: mix.tracks.filter { !remove($0) },
+                iconName: mix.iconName
+            )
+        }.filter { !$0.tracks.isEmpty }
+        stationMixes = stationMixes.map { mix in
+            HomeMix(
+                id: mix.id,
+                title: mix.title,
+                subtitle: mix.subtitle,
+                tracks: mix.tracks.filter { !remove($0) },
+                iconName: mix.iconName
+            )
+        }.filter { !$0.tracks.isEmpty }
+        persistCachedHome()
+    }
+
+    private func rebuildVisibleHomeAfterFeedback() {
+        myTracks = applyFeedback(to: myTracks)
+        feedTracks = rankedDiverseTracks(feedTracks + recommendedTracks, limit: max(feedTracks.count, 24), maxPerArtist: 2)
+        followingTracks = applyFeedback(to: followingTracks)
+        likedTracks = applyFeedback(to: likedTracks)
+        recommendedTracks = applyFeedback(to: recommendedTracks)
+        homeMixes = Self.buildHomeMixes(
+            feedTracks: feedTracks,
+            followingTracks: followingTracks,
+            ownedTracks: myTracks,
+            likedTracks: likedTracks,
+            recommendedTracks: recommendedTracks,
+            username: me?.username
+        )
+        stationMixes = Self.buildFallbackStationMixes(from: recommendedTracks + feedTracks + followingTracks)
+        persistCachedHome()
+    }
+
     private static func buildHomeMixes(
         feedTracks: [SCTrack],
         followingTracks: [SCTrack],
@@ -553,8 +719,8 @@ final class HomeViewModel: ObservableObject {
         recommendedTracks: [SCTrack] = [],
         username: String?
     ) -> [HomeMix] {
-        let dailyDrops = uniqueTracks(feedTracks + followingTracks)
-        let weeklyWave = uniqueTracks(followingTracks + feedTracks)
+        let dailyDrops = diverseTracks(feedTracks + followingTracks, limit: 24, maxPerArtist: 2)
+        let weeklyWave = diverseTracks(followingTracks + feedTracks, limit: 24, maxPerArtist: 2)
         let personalPool = uniqueTracks(
             ownedTracks
                 + lastFMTasteTracks
@@ -570,63 +736,97 @@ final class HomeViewModel: ObservableObject {
         }
 
         var mixes: [HomeMix] = []
+        var usedMixTrackKeys = Set<String>()
 
         if !lastFMTasteTracks.isEmpty {
+            let tracks = consumeDiverseTracks(
+                from: lastFMTasteTracks,
+                limit: 32,
+                maxPerArtist: 3,
+                minimumFallbackCount: 10,
+                usedKeys: &usedMixTrackKeys
+            )
             mixes.append(HomeMix(
                 id: "lastfm-taste",
                 title: "Last.fm Taste",
-                subtitle: "\(min(lastFMTasteTracks.count, 50)) Tracks aus Scrobbles und Top-Artists",
-                tracks: Array(lastFMTasteTracks.prefix(50)),
+                subtitle: "\(tracks.count) Tracks aus Scrobbles und Top-Artists",
+                tracks: tracks,
                 iconName: "music.note.list"
             ))
         }
 
         if !personalPool.isEmpty {
-            let shuffledTracks = Array(weightedShuffleTracks(
-                lastFMTasteTracks: lastFMTasteTracks,
-                likedTracks: likedTracks,
-                ownedTracks: ownedTracks,
-                playlistTracks: playlistTracks,
-                likedPlaylistTracks: likedPlaylistTracks,
-                recommendedTracks: recommendedTracks,
-                feedTracks: feedTracks,
-                followingTracks: followingTracks
-            ).prefix(50))
+            let shuffledTracks = consumeDiverseTracks(
+                from: weightedShuffleTracks(
+                    lastFMTasteTracks: lastFMTasteTracks,
+                    likedTracks: likedTracks,
+                    ownedTracks: ownedTracks,
+                    playlistTracks: playlistTracks,
+                    likedPlaylistTracks: likedPlaylistTracks,
+                    recommendedTracks: recommendedTracks,
+                    feedTracks: feedTracks,
+                    followingTracks: followingTracks
+                ),
+                limit: 36,
+                maxPerArtist: 3,
+                minimumFallbackCount: 12,
+                usedKeys: &usedMixTrackKeys
+            )
             mixes.append(HomeMix(
                 id: "shuffle-feed",
                 title: "Shuffle Feed",
-                subtitle: "\(shuffledTracks.count) Tracks stark gewichtet nach Last.fm, Likes und Start",
+                subtitle: "\(shuffledTracks.count) Tracks gewichtet nach Last.fm, Likes und Start",
                 tracks: shuffledTracks,
                 iconName: "shuffle"
             ))
         }
 
         if !dailyDrops.isEmpty {
+            let tracks = consumeDiverseTracks(
+                from: dailyDrops,
+                limit: 24,
+                maxPerArtist: 2,
+                minimumFallbackCount: 8,
+                usedKeys: &usedMixTrackKeys
+            )
             mixes.append(HomeMix(
                 id: "daily-drops",
                 title: "Daily Drops",
                 subtitle: username.map { "Neue Tracks aus \($0)s Start" } ?? "Neue SoundCloud Tracks",
-                tracks: Array(dailyDrops.prefix(24)),
+                tracks: tracks,
                 iconName: "sparkles"
             ))
         }
 
         if !weeklyWave.isEmpty {
+            let tracks = consumeDiverseTracks(
+                from: weeklyWave,
+                limit: 24,
+                maxPerArtist: 2,
+                minimumFallbackCount: 8,
+                usedKeys: &usedMixTrackKeys
+            )
             mixes.append(HomeMix(
                 id: "weekly-wave",
                 title: "Weekly Wave",
-                subtitle: "\(min(weeklyWave.count, 24)) Tracks von deinem Feed und Followings",
-                tracks: Array(weeklyWave.prefix(24)),
+                subtitle: "\(tracks.count) Tracks von deinem Feed und Followings",
+                tracks: tracks,
                 iconName: "waveform"
             ))
         }
 
         if !personalPool.isEmpty {
-            let mixCount = min(4, max(1, personalPool.count))
+            let mixCount = min(4, max(1, Int(ceil(Double(personalPool.count) / 12.0))))
             for index in 0..<mixCount {
-                let offset = (index * 6) % personalPool.count
+                let offset = (index * max(4, personalPool.count / max(mixCount, 1))) % personalPool.count
                 let rotated = Array(personalPool.dropFirst(offset)) + Array(personalPool.prefix(offset))
-                let tracks = Array(uniqueTracks(rotated).prefix(24))
+                let tracks = consumeDiverseTracks(
+                    from: rotated,
+                    limit: 24,
+                    maxPerArtist: 2,
+                    minimumFallbackCount: 6,
+                    usedKeys: &usedMixTrackKeys
+                )
                 guard !tracks.isEmpty else { continue }
 
                 mixes.append(HomeMix(
@@ -649,7 +849,7 @@ final class HomeViewModel: ObservableObject {
             ))
         }
 
-        return mixes
+        return mixes.filter { !$0.tracks.isEmpty }
     }
 
     private static func weightedShuffleTracks(
@@ -680,11 +880,71 @@ final class HomeViewModel: ObservableObject {
         return (0..<times).flatMap { _ in tracks }
     }
 
-    private static func uniqueTracks(_ tracks: [SCTrack]) -> [SCTrack] {
-        var seen = Set<String>()
-        return tracks.filter { track in
-            seen.insert(track.id).inserted
+    private static func consumeDiverseTracks(
+        from tracks: [SCTrack],
+        limit: Int,
+        maxPerArtist: Int,
+        minimumFallbackCount: Int,
+        usedKeys: inout Set<String>
+    ) -> [SCTrack] {
+        let unique = uniqueTracks(tracks)
+        var selected = diverseTracks(
+            unique.filter { !usedKeys.contains(TrackIdentity.canonicalKey(for: $0)) },
+            limit: limit,
+            maxPerArtist: maxPerArtist
+        )
+
+        if selected.count < minimumFallbackCount {
+            let selectedKeys = Set(selected.map { TrackIdentity.canonicalKey(for: $0) })
+            let fallback = diverseTracks(
+                unique.filter { !selectedKeys.contains(TrackIdentity.canonicalKey(for: $0)) },
+                limit: limit - selected.count,
+                maxPerArtist: maxPerArtist
+            )
+            selected.append(contentsOf: fallback)
         }
+
+        selected.prefix(limit).forEach { usedKeys.insert(TrackIdentity.canonicalKey(for: $0)) }
+        return Array(selected.prefix(limit))
+    }
+
+    private static func diverseTracks(_ tracks: [SCTrack], limit: Int, maxPerArtist: Int) -> [SCTrack] {
+        guard limit > 0 else { return [] }
+
+        let unique = uniqueTracks(tracks)
+        var selected: [SCTrack] = []
+        var artistCounts: [String: Int] = [:]
+
+        for track in unique {
+            let artistKey = TrackIdentity.displayMetadata(for: track).artist
+                .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+                .lowercased()
+            guard artistCounts[artistKey, default: 0] < maxPerArtist else {
+                continue
+            }
+
+            selected.append(track)
+            artistCounts[artistKey, default: 0] += 1
+            if selected.count == limit { return selected }
+        }
+
+        if selected.count < limit {
+            let selectedKeys = Set(selected.map { TrackIdentity.canonicalKey(for: $0) })
+            selected.append(contentsOf: unique.filter { !selectedKeys.contains(TrackIdentity.canonicalKey(for: $0)) }.prefix(limit - selected.count))
+        }
+
+        return selected
+    }
+
+    private static func uniqueTracks(_ tracks: [SCTrack]) -> [SCTrack] {
+        TrackIdentity.uniqueTracks(tracks)
+    }
+
+    private static func artistKey(for track: SCTrack) -> String {
+        TrackIdentity.displayMetadata(for: track).artist
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func uniqueQueries(_ queries: [String?]) -> [String] {
@@ -704,6 +964,21 @@ final class HomeViewModel: ObservableObject {
         return playlists.filter { playlist in
             seen.insert(playlist.id).inserted
         }
+    }
+
+    private static func loadFeedFeedback() -> FeedFeedback {
+        guard let data = UserDefaults.standard.data(forKey: Storage.feedFeedbackKey),
+              let decoded = try? JSONDecoder().decode(FeedFeedback.self, from: data) else {
+            return FeedFeedback()
+        }
+        return decoded
+    }
+
+    private func persistFeedFeedback() {
+        guard let data = try? JSONEncoder().encode(feedback) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Storage.feedFeedbackKey)
     }
 
     private func restoreCachedHome() {

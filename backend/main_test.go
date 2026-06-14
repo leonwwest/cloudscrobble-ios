@@ -32,6 +32,18 @@ func TestLoadConfigRejectsInvalidTokenURL(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsInvalidLastFMURL(t *testing.T) {
+	t.Setenv("SOUNDCLOUD_CLIENT_ID", "id")
+	t.Setenv("SOUNDCLOUD_CLIENT_SECRET", "secret")
+	t.Setenv("SOUNDCLOUD_TOKEN_URL", "https://secure.soundcloud.com/oauth/token")
+	t.Setenv("LASTFM_API_URL", "http://[::1")
+
+	_, err := loadConfig()
+	if err == nil || !strings.Contains(err.Error(), "invalid LASTFM_API_URL") {
+		t.Fatalf("expected invalid last.fm url error, got %v", err)
+	}
+}
+
 func TestExchangeEndpointRequiresFields(t *testing.T) {
 	cfg := config{
 		SoundCloudClientID: "id",
@@ -111,6 +123,228 @@ func TestClientCredentialsProxiesUpstreamJSON(t *testing.T) {
 	}
 	if payload["access_token"] != "token123" {
 		t.Fatalf("unexpected access token payload: %+v", payload)
+	}
+}
+
+func TestLastFMMobileSessionProxiesUpstreamJSON(t *testing.T) {
+	var gotMethod, gotUsername, gotPassword, gotAPIKey, gotFormat, gotAPISig, gotAPISecret string
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form failed: %v", err)
+		}
+		gotMethod = r.Form.Get("method")
+		gotUsername = r.Form.Get("username")
+		gotPassword = r.Form.Get("password")
+		gotAPIKey = r.Form.Get("api_key")
+		gotFormat = r.Form.Get("format")
+		gotAPISig = r.Form.Get("api_sig")
+		gotAPISecret = r.Form.Get("api_secret")
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"session": map[string]any{
+				"name":       "westf5",
+				"key":        "session-key",
+				"subscriber": 0,
+			},
+		})
+	}))
+	defer upstream.Close()
+
+	cfg := config{
+		LastFMAPIKey:    "lastfm-key",
+		LastFMAPISecret: "lastfm-secret",
+		LastFMAPIURL:    upstream.URL,
+		AllowedOrigin:   "*",
+		RequestTimeout:  2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/lastfm/mobile-session", strings.NewReader(`{"username":" westf5 ","password":"pw"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if gotMethod != "auth.getMobileSession" || gotUsername != "westf5" || gotPassword != "pw" {
+		t.Fatalf("unexpected upstream auth form: method=%q username=%q password=%q", gotMethod, gotUsername, gotPassword)
+	}
+	if gotAPIKey != "lastfm-key" || gotFormat != "json" || gotAPISig == "" {
+		t.Fatalf("unexpected upstream api fields: api_key=%q format=%q api_sig=%q", gotAPIKey, gotFormat, gotAPISig)
+	}
+	if gotAPISecret != "" {
+		t.Fatalf("api secret must not be sent upstream as a form field")
+	}
+
+	var payload struct {
+		Session struct {
+			Name string `json:"name"`
+			Key  string `json:"key"`
+		} `json:"session"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json response: %v", err)
+	}
+	if payload.Session.Name != "westf5" || payload.Session.Key != "session-key" {
+		t.Fatalf("unexpected session payload: %+v", payload.Session)
+	}
+}
+
+func TestLastFMEndpointRequiresConfig(t *testing.T) {
+	cfg := config{
+		LastFMAPIURL:   "https://example.com/2.0/",
+		AllowedOrigin:  "*",
+		RequestTimeout: 2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/lastfm/mobile-session", strings.NewReader(`{"username":"westf5","password":"pw"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json response: %v", err)
+	}
+	if payload["error"] != "missing_lastfm_config" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestLastFMScrobbleProxiesIndexedFields(t *testing.T) {
+	var gotMethod, gotSessionKey, gotArtist, gotTrack, gotTimestamp, gotFormat, gotAPISig string
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form failed: %v", err)
+		}
+		gotMethod = r.Form.Get("method")
+		gotSessionKey = r.Form.Get("sk")
+		gotArtist = r.Form.Get("artist[0]")
+		gotTrack = r.Form.Get("track[0]")
+		gotTimestamp = r.Form.Get("timestamp[0]")
+		gotFormat = r.Form.Get("format")
+		gotAPISig = r.Form.Get("api_sig")
+
+		writeJSON(w, http.StatusOK, map[string]any{})
+	}))
+	defer upstream.Close()
+
+	cfg := config{
+		LastFMAPIKey:    "lastfm-key",
+		LastFMAPISecret: "lastfm-secret",
+		LastFMAPIURL:    upstream.URL,
+		AllowedOrigin:   "*",
+		RequestTimeout:  2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/lastfm/scrobble", strings.NewReader(`{"sessionKey":"session","scrobbles":[{"artist":"Artist","track":"Track","timestamp":1710000000}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if gotMethod != "track.scrobble" || gotSessionKey != "session" {
+		t.Fatalf("unexpected upstream scrobble method/session: method=%q sk=%q", gotMethod, gotSessionKey)
+	}
+	if gotArtist != "Artist" || gotTrack != "Track" || gotTimestamp != "1710000000" {
+		t.Fatalf("unexpected indexed scrobble fields: artist=%q track=%q timestamp=%q", gotArtist, gotTrack, gotTimestamp)
+	}
+	if gotFormat != "json" || gotAPISig == "" {
+		t.Fatalf("unexpected upstream api fields: format=%q api_sig=%q", gotFormat, gotAPISig)
+	}
+}
+
+func TestLastFMTasteNormalizesProfile(t *testing.T) {
+	var gotMethods []string
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form failed: %v", err)
+		}
+		gotMethods = append(gotMethods, r.Form.Get("method"))
+		if r.Form.Get("user") != "westf5" {
+			t.Fatalf("unexpected user: %q", r.Form.Get("user"))
+		}
+
+		switch r.Form.Get("method") {
+		case "user.getRecentTracks":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"recenttracks": map[string]any{
+					"track": []map[string]any{
+						{
+							"name":   "Song A",
+							"artist": map[string]string{"#text": "Artist A"},
+						},
+						{
+							"name":   "Song B",
+							"artist": map[string]string{"#text": "Artist B"},
+						},
+					},
+				},
+			})
+		case "user.getTopArtists":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"topartists": map[string]any{
+					"artist": []map[string]any{
+						{"name": "Artist A", "playcount": "42"},
+						{"name": "Artist C", "playcount": 7},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected last.fm method: %q", r.Form.Get("method"))
+		}
+	}))
+	defer upstream.Close()
+
+	cfg := config{
+		LastFMAPIKey:    "lastfm-key",
+		LastFMAPISecret: "lastfm-secret",
+		LastFMAPIURL:    upstream.URL,
+		AllowedOrigin:   "*",
+		RequestTimeout:  2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/lastfm/taste", strings.NewReader(`{"username":" westf5 ","limit":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(gotMethods) != 2 || gotMethods[0] != "user.getRecentTracks" || gotMethods[1] != "user.getTopArtists" {
+		t.Fatalf("unexpected upstream method calls: %+v", gotMethods)
+	}
+
+	var payload struct {
+		Username     string              `json:"username"`
+		RecentTracks []lastFMTasteTrack  `json:"recentTracks"`
+		TopArtists   []lastFMTasteArtist `json:"topArtists"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json response: %v", err)
+	}
+	if payload.Username != "westf5" {
+		t.Fatalf("unexpected username: %q", payload.Username)
+	}
+	if len(payload.RecentTracks) != 2 || payload.RecentTracks[0].Artist != "Artist A" || payload.RecentTracks[0].Name != "Song A" {
+		t.Fatalf("unexpected recent tracks: %+v", payload.RecentTracks)
+	}
+	if len(payload.TopArtists) != 2 || payload.TopArtists[0].Name != "Artist A" || payload.TopArtists[0].Playcount != 42 {
+		t.Fatalf("unexpected top artists: %+v", payload.TopArtists)
 	}
 }
 

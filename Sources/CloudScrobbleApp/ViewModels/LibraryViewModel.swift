@@ -265,10 +265,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private static func buildSmartMixes(from tracks: [SCTrack], lastFMTasteTracks: [SCTrack] = []) -> [SmartMix] {
-        let uniqueTracks = tracks.reduce(into: [SCTrack]()) { result, track in
-            guard !result.contains(where: { $0.id == track.id }) else { return }
-            result.append(track)
-        }
+        let uniqueTracks = Self.uniqueTracks(tracks)
 
         guard !uniqueTracks.isEmpty else { return [] }
 
@@ -390,10 +387,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private static func uniqueTracks(_ tracks: [SCTrack]) -> [SCTrack] {
-        var seen = Set<String>()
-        return tracks.filter { track in
-            seen.insert(track.id).inserted
-        }
+        TrackIdentity.uniqueTracks(tracks)
     }
 
     private func restoreCachedLibrary() {

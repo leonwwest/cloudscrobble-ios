@@ -59,6 +59,10 @@ struct HomeView: View {
                     HomeMessageBanner(message: message)
                 }
 
+                if let feedbackSummary = viewModel.feedbackSummary {
+                    HomeMessageBanner(message: feedbackSummary)
+                }
+
                 if viewModel.isLoading && !hasHomeContent {
                     LoadingResultSkeletonList(count: 5)
                 } else if !hasHomeContent {
@@ -119,12 +123,28 @@ struct HomeView: View {
                         icon: "heart.rectangle.fill",
                         playlists: viewModel.likedPlaylists
                     )
+
+                    if viewModel.canLoadMoreFeed {
+                        Button {
+                            Task { await viewModel.loadMoreFeed() }
+                        } label: {
+                            Label(
+                                viewModel.isLoadingMoreFeed ? "Lade mehr..." : "Mehr Feed laden",
+                                systemImage: "arrow.down.circle"
+                            )
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+                        .disabled(viewModel.isLoadingMoreFeed)
+                    }
                 }
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
         }
         .scrollIndicators(.hidden)
+        .refreshable {
+            await viewModel.refresh()
+        }
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 84)
         }
@@ -155,6 +175,15 @@ struct HomeView: View {
                 },
                 onAddToQueueTrack: { track in
                     Task { await viewModel.addToQueue(track: track) }
+                },
+                onHideTrack: { track in
+                    viewModel.hide(track: track)
+                },
+                onLessLikeTrack: { track in
+                    viewModel.lessLike(track: track)
+                },
+                onMoreLikeTrack: { track in
+                    viewModel.moreLike(track: track)
                 }
             )
         }
@@ -181,6 +210,15 @@ struct HomeView: View {
                 },
                 onAddToQueueTrack: { track in
                     Task { await viewModel.addToQueue(track: track) }
+                },
+                onHideTrack: { track in
+                    viewModel.hide(track: track)
+                },
+                onLessLikeTrack: { track in
+                    viewModel.lessLike(track: track)
+                },
+                onMoreLikeTrack: { track in
+                    viewModel.moreLike(track: track)
                 }
             )
         }
@@ -212,6 +250,12 @@ struct HomeView: View {
                                 Task { await viewModel.playNext(track: track) }
                             } onAddToQueue: {
                                 Task { await viewModel.addToQueue(track: track) }
+                            } onHide: {
+                                viewModel.hide(track: track)
+                            } onLessLike: {
+                                viewModel.lessLike(track: track)
+                            } onMoreLike: {
+                                viewModel.moreLike(track: track)
                             }
                         }
                     }
@@ -297,16 +341,7 @@ private struct HomeHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: user?.avatarURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(CloudTheme.elevatedStrong)
-                        .overlay(Image(systemName: "house.fill").foregroundStyle(CloudTheme.sky))
-                }
-            }
+            CachedArtworkImage(url: user?.avatarURL, iconName: "house.fill", maxPixelSize: 180)
             .frame(width: 54, height: 54)
             .clipShape(Circle())
 
@@ -434,6 +469,9 @@ private struct HomeTrackCard: View {
     let onPlay: () -> Void
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
+    let onHide: () -> Void
+    let onLessLike: () -> Void
+    let onMoreLike: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -455,12 +493,12 @@ private struct HomeTrackCard: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(track.title)
+                Text(displayMetadata.track)
                     .font(.system(.subheadline, design: .rounded).weight(.black))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
                     .frame(height: 38, alignment: .top)
-                Text(track.user.username)
+                Text(displayMetadata.artist)
                     .font(.system(.caption2, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
                     .lineLimit(1)
@@ -474,7 +512,18 @@ private struct HomeTrackCard: View {
                     Button(action: onAddToQueue) {
                         Label("Add to Queue", systemImage: "text.badge.plus")
                     }
+                    Divider()
+                    Button(action: onMoreLike) {
+                        Label("Mehr von diesem Artist", systemImage: "hand.thumbsup")
+                    }
+                    Button(action: onLessLike) {
+                        Label("Weniger davon", systemImage: "hand.thumbsdown")
+                    }
+                    Button(role: .destructive, action: onHide) {
+                        Label("Nicht nochmal", systemImage: "eye.slash")
+                    }
                     if let permalinkURL = track.permalinkURL {
+                        Divider()
                         Button {
                             openURL(permalinkURL)
                         } label: {
@@ -514,6 +563,10 @@ private struct HomeTrackCard: View {
 #if os(iOS)
         UIPasteboard.general.string = text
 #endif
+    }
+
+    private var displayMetadata: LastFMTrackMeta {
+        TrackIdentity.displayMetadata(for: track)
     }
 }
 
@@ -699,6 +752,9 @@ private struct HomePlaylistTracksSheet: View {
     let onPlayTrack: (SCTrack) -> Void
     let onPlayNextTrack: (SCTrack) -> Void
     let onAddToQueueTrack: (SCTrack) -> Void
+    let onHideTrack: (SCTrack) -> Void
+    let onLessLikeTrack: (SCTrack) -> Void
+    let onMoreLikeTrack: (SCTrack) -> Void
 
     var body: some View {
         ScrollView {
@@ -750,6 +806,12 @@ private struct HomePlaylistTracksSheet: View {
                         onPlayNextTrack(track)
                     } onAddToQueue: {
                         onAddToQueueTrack(track)
+                    } onHide: {
+                        onHideTrack(track)
+                    } onLessLike: {
+                        onLessLikeTrack(track)
+                    } onMoreLike: {
+                        onMoreLikeTrack(track)
                     }
                 }
             }
@@ -767,6 +829,9 @@ private struct HomeMixTracksSheet: View {
     let onPlayTrack: (SCTrack) -> Void
     let onPlayNextTrack: (SCTrack) -> Void
     let onAddToQueueTrack: (SCTrack) -> Void
+    let onHideTrack: (SCTrack) -> Void
+    let onLessLikeTrack: (SCTrack) -> Void
+    let onMoreLikeTrack: (SCTrack) -> Void
 
     var body: some View {
         ScrollView {
@@ -822,6 +887,12 @@ private struct HomeMixTracksSheet: View {
                         onPlayNextTrack(track)
                     } onAddToQueue: {
                         onAddToQueueTrack(track)
+                    } onHide: {
+                        onHideTrack(track)
+                    } onLessLike: {
+                        onLessLikeTrack(track)
+                    } onMoreLike: {
+                        onMoreLikeTrack(track)
                     }
                 }
             }
@@ -837,6 +908,9 @@ private struct HomeSheetTrackRow: View {
     let onPlay: () -> Void
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
+    let onHide: () -> Void
+    let onLessLike: () -> Void
+    let onMoreLike: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -844,11 +918,11 @@ private struct HomeSheetTrackRow: View {
                 .frame(width: 58, height: 58)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
+                Text(displayMetadata.track)
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(2)
-                Text(track.user.username)
+                Text(displayMetadata.artist)
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
                     .lineLimit(1)
@@ -862,6 +936,16 @@ private struct HomeSheetTrackRow: View {
                 }
                 Button(action: onAddToQueue) {
                     Label("Add to Queue", systemImage: "text.badge.plus")
+                }
+                Divider()
+                Button(action: onMoreLike) {
+                    Label("Mehr von diesem Artist", systemImage: "hand.thumbsup")
+                }
+                Button(action: onLessLike) {
+                    Label("Weniger davon", systemImage: "hand.thumbsdown")
+                }
+                Button(role: .destructive, action: onHide) {
+                    Label("Nicht nochmal", systemImage: "eye.slash")
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -892,6 +976,10 @@ private struct HomeSheetTrackRow: View {
                 .stroke(CloudTheme.line, lineWidth: 1)
         )
     }
+
+    private var displayMetadata: LastFMTrackMeta {
+        TrackIdentity.displayMetadata(for: track)
+    }
 }
 
 private struct HomeArtworkTile: View {
@@ -899,22 +987,7 @@ private struct HomeArtworkTile: View {
     let iconName: String
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-            default:
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(CloudTheme.elevatedStrong)
-                    .overlay(
-                        Image(systemName: iconName)
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(CloudTheme.sky)
-                    )
-            }
-        }
+        CachedArtworkImage(url: url, iconName: iconName)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

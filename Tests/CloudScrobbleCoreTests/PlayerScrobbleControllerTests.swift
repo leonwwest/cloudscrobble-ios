@@ -47,6 +47,20 @@ final class PlayerScrobbleControllerTests: XCTestCase {
         XCTAssertNil(controller.currentItem)
     }
 
+    func testLastFMDiagnosticsFlushPendingScrobbles() async {
+        let scrobbler = DiagnosticScrobbler(pendingCount: 2)
+        let controller = PlayerScrobbleController(lastFMScrobbler: scrobbler)
+
+        await controller.refreshLastFMDiagnostics()
+        XCTAssertEqual(controller.pendingScrobbleCount, 2)
+
+        await controller.flushPendingLastFMScrobbles()
+
+        XCTAssertEqual(controller.pendingScrobbleCount, 0)
+        XCTAssertNotNil(controller.lastScrobbleSucceededAt)
+        XCTAssertNil(controller.lastScrobbleError)
+    }
+
     private func makeQueueItem(id: String) -> QueueItem {
         QueueItem(
             trackURN: "soundcloud:tracks:test:\(id)",
@@ -58,5 +72,27 @@ final class PlayerScrobbleControllerTests: XCTestCase {
             durationSeconds: 180,
             lastFM: LastFMTrackMeta(artist: "Test Artist", track: id.capitalized)
         )
+    }
+}
+
+private actor DiagnosticScrobbler: LastFMScrobbleSending {
+    private var pendingCountValue: Int
+
+    init(pendingCount: Int) {
+        self.pendingCountValue = pendingCount
+    }
+
+    func updateNowPlaying(meta: LastFMTrackMeta, durationSeconds: Int?) async throws {}
+
+    func scrobble(meta: LastFMTrackMeta, timestamp: Int) async throws {
+        pendingCountValue += 1
+    }
+
+    func flushPendingScrobbles() async throws {
+        pendingCountValue = 0
+    }
+
+    func pendingScrobbleCount() async -> Int {
+        pendingCountValue
     }
 }

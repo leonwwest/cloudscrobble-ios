@@ -68,20 +68,61 @@ final class MockSoundCloudAPIClientTests: XCTestCase {
         XCTAssertEqual(stream.url, hlsURL)
         XCTAssertEqual(stream.headers["Authorization"], "OAuth test-token")
     }
+
+    func testPlaybackResolverCachesResolvedStreams() async throws {
+        let hlsURL = URL(string: "https://api.soundcloud.com/tracks/soundcloud:tracks:1/streams/stream-id/hls")!
+        let api = StreamFixtureAPI(
+            streams: SCStreams(hlsMP3128URL: hlsURL),
+            headers: ["Authorization": "OAuth test-token"]
+        )
+        let resolver = PlaybackResolver(api: api)
+
+        _ = try await resolver.resolvePlayableStream(for: "soundcloud:tracks:1")
+        _ = try await resolver.resolvePlayableStream(for: "soundcloud:tracks:1")
+
+        let count = await api.streamCallCount()
+        XCTAssertEqual(count, 1)
+    }
+
+    func testPlaybackResolverPrefetchesUpcomingUncachedStreams() async throws {
+        let hlsURL = URL(string: "https://api.soundcloud.com/tracks/soundcloud:tracks:1/streams/stream-id/hls")!
+        let api = StreamFixtureAPI(
+            streams: SCStreams(hlsMP3128URL: hlsURL),
+            headers: ["Authorization": "OAuth test-token"]
+        )
+        let resolver = PlaybackResolver(api: api)
+
+        await resolver.prefetchPlayableStreams(for: [
+            "soundcloud:tracks:1",
+            "soundcloud:tracks:2",
+            "soundcloud:tracks:3",
+            "soundcloud:tracks:4",
+            "soundcloud:tracks:5"
+        ])
+        _ = try await resolver.resolvePlayableStream(for: "soundcloud:tracks:1")
+
+        let count = await api.streamCallCount()
+        XCTAssertEqual(count, 4)
+    }
 }
 
 private actor StreamFixtureAPI: SoundCloudAPIClienting {
     let fixtureStreams: SCStreams
     let headers: [String: String]
+    private var streamsCallCount = 0
 
     init(streams: SCStreams, headers: [String: String]) {
         self.fixtureStreams = streams
         self.headers = headers
     }
 
-    func streams(trackURN: String) async throws -> SCStreams { fixtureStreams }
+    func streams(trackURN: String) async throws -> SCStreams {
+        streamsCallCount += 1
+        return fixtureStreams
+    }
     func streamRequestHeaders() async throws -> [String: String] { headers }
     func legacyStreamURL(trackURN: String) async throws -> URL { throw unused() }
+    func streamCallCount() -> Int { streamsCallCount }
 
     func me() async throws -> SCUser { throw unused() }
     func homeFeed(limit: Int, nextHref: URL?) async throws -> SCPage<SCActivity> { throw unused() }

@@ -27,6 +27,7 @@ public final class PlayerScrobbleController: ObservableObject {
     private enum Storage {
         static let savedPlaybackSnapshotKey = "cloudscrobble.savedPlaybackSnapshot.v1"
         static let recentlyPlayedKey = "cloudscrobble.recentlyPlayed.v1"
+        static let scrobbleHistoryKey = "cloudscrobble.scrobbleHistory.v1"
     }
 
     @Published public private(set) var phase: PlaybackPhase = .idle
@@ -37,6 +38,11 @@ public final class PlayerScrobbleController: ObservableObject {
     @Published public private(set) var isShuffleEnabled = false
     @Published public private(set) var repeatMode: PlaybackRepeatMode = .off
     @Published public private(set) var recentlyPlayed: [SavedPlaybackTrack] = []
+    @Published public private(set) var pendingScrobbleCount = 0
+    @Published public private(set) var lastScrobbleSucceededAt: Date?
+    @Published public private(set) var lastScrobbleError: String?
+    @Published public private(set) var scrobbleHistory: [ScrobbleHistoryEntry] = []
+    @Published public private(set) var skippedUnplayableCount = 0
 
     private let player = AVQueuePlayer()
     private let scrobbleEngine = ScrobbleEngine()
@@ -49,6 +55,8 @@ public final class PlayerScrobbleController: ObservableObject {
     private var debugDismissalTask: Task<Void, Never>?
     private var orderedQueue: [QueueItem] = []
     private var shouldResumeAfterInterruption = false
+    private var lastSnapshotPersistedAt: Date?
+    private var stalledRecoveryTask: Task<Void, Never>?
 #if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
     private var nowPlayingArtworkTask: Task<Void, Never>?
     private var nowPlayingArtworkTrackURN: String?
@@ -77,6 +85,7 @@ public final class PlayerScrobbleController: ObservableObject {
     public init(lastFMScrobbler: LastFMScrobbleSending?) {
         self.lastFMScrobbler = lastFMScrobbler
         self.recentlyPlayed = Self.loadRecentlyPlayed()
+        self.scrobbleHistory = Self.loadScrobbleHistory()
         player.actionAtItemEnd = .advance
         player.automaticallyWaitsToMinimizeStalling = true
         configureAudioSession()
@@ -91,6 +100,45 @@ public final class PlayerScrobbleController: ObservableObject {
         lastFMScrobbler = scrobbler
         if scrobbler == nil, debugStatus.hasPrefix("Scrobble") || debugStatus == "Now Playing sent" {
             debugStatus = "Last.fm not connected"
+        }
+        if scrobbler == nil {
+            pendingScrobbleCount = 0
+            lastScrobbleError = nil
+        } else {
+            Task { [weak self] in
+                await self?.refreshLastFMDiagnostics()
+            }
+        }
+    }
+
+    public func refreshLastFMDiagnostics() async {
+        guard let lastFMScrobbler else {
+            pendingScrobbleCount = 0
+            return
+        }
+
+        pendingScrobbleCount = await lastFMScrobbler.pendingScrobbleCount()
+    }
+
+    public func flushPendingLastFMScrobbles() async {
+        guard let lastFMScrobbler else {
+            pendingScrobbleCount = 0
+            return
+        }
+
+        let previousPendingCount = await lastFMScrobbler.pendingScrobbleCount()
+        do {
+            try await lastFMScrobbler.flushPendingScrobbles()
+            pendingScrobbleCount = await lastFMScrobbler.pendingScrobbleCount()
+            lastScrobbleError = nil
+            if previousPendingCount > 0, pendingScrobbleCount == 0 {
+                lastScrobbleSucceededAt = Date()
+                setDebugStatus("Pending scrobbles sent", autoDismissAfter: 2_800_000_000)
+            }
+        } catch {
+            pendingScrobbleCount = await lastFMScrobbler.pendingScrobbleCount()
+            lastScrobbleError = error.localizedDescription
+            setDebugStatus("Scrobble retry failed: \(error.localizedDescription)")
         }
     }
 
@@ -223,6 +271,8 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func clearQueue() {
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = nil
         player.pause()
         player.removeAllItems()
         queue = []
@@ -239,6 +289,12 @@ public final class PlayerScrobbleController: ObservableObject {
     public func clearRecentlyPlayed() {
         recentlyPlayed = []
         UserDefaults.standard.removeObject(forKey: Storage.recentlyPlayedKey)
+    }
+
+    public func clearScrobbleHistory() {
+        scrobbleHistory = []
+        skippedUnplayableCount = 0
+        UserDefaults.standard.removeObject(forKey: Storage.scrobbleHistoryKey)
     }
 
     public func cycleRepeatMode() {
@@ -293,6 +349,7 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func clearSavedPlaybackSnapshot() {
+        lastSnapshotPersistedAt = nil
         UserDefaults.standard.removeObject(forKey: Storage.savedPlaybackSnapshotKey)
     }
 
@@ -362,6 +419,8 @@ public final class PlayerScrobbleController: ObservableObject {
     private func rebuildPlayerQueue(startAt index: Int) {
         guard queue.indices.contains(index) else { return }
 
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = nil
         phase = .loading
 
         configureAudioSession()
@@ -384,6 +443,9 @@ public final class PlayerScrobbleController: ObservableObject {
 
     @discardableResult
     private func startTrackState(at index: Int, playbackRate: Double) -> [ScrobbleEngineEvent] {
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = nil
+
         guard queue.indices.contains(index) else {
             scrobbleEngine.stop()
             phase = .idle
@@ -411,14 +473,23 @@ public final class PlayerScrobbleController: ObservableObject {
 
     private func makePlayerItem(for item: QueueItem) -> AVPlayerItem {
         guard !item.streamHeaders.isEmpty else {
-            return AVPlayerItem(url: item.streamURL)
+            let playerItem = AVPlayerItem(url: item.streamURL)
+            configurePlayerItemBuffering(playerItem)
+            return playerItem
         }
 
         let asset = AVURLAsset(
             url: item.streamURL,
             options: ["AVURLAssetHTTPHeaderFieldsKey": item.streamHeaders]
         )
-        return AVPlayerItem(asset: asset)
+        let playerItem = AVPlayerItem(asset: asset)
+        configurePlayerItemBuffering(playerItem)
+        return playerItem
+    }
+
+    private func configurePlayerItemBuffering(_ item: AVPlayerItem) {
+        item.preferredForwardBufferDuration = 8
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
     }
 
     private func configureAudioSession() {
@@ -464,7 +535,7 @@ public final class PlayerScrobbleController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.setDebugStatus("Buffering stream...", autoDismissAfter: 2_500_000_000)
+                self?.handlePlaybackStalled()
             }
         }
     }
@@ -563,7 +634,15 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func handleCurrentTrackEnded() {
-        guard let finishedIndex = currentIndex else { return }
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = nil
+
+        guard let finishedIndex = currentIndex, queue.indices.contains(finishedIndex) else { return }
+        let finishedItem = queue[finishedIndex]
+        let finishEvents = scrobbleEngine.finish(
+            playbackTime: max(elapsedSeconds, Double(finishedItem.durationSeconds))
+        )
+        dispatchLater(finishEvents)
 
         if repeatMode == .one {
             rebuildPlayerQueue(startAt: finishedIndex)
@@ -594,10 +673,17 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func handlePlaybackProblem(errorMessage: String?) {
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = nil
+
         let failedTitle: String?
-        if let currentIndex, queue.indices.contains(currentIndex) {
-            failedTitle = queue[currentIndex].title
+        let failedItem: QueueItem?
+        let failedIndex = currentIndex
+        if let failedIndex, queue.indices.contains(failedIndex) {
+            failedItem = queue[failedIndex]
+            failedTitle = failedItem?.title
         } else {
+            failedItem = nil
             failedTitle = nil
         }
 
@@ -607,25 +693,65 @@ public final class PlayerScrobbleController: ObservableObject {
             setDebugStatus("Track not playable")
         }
 
-        guard let currentIndex else {
+        skippedUnplayableCount += 1
+        if let failedItem {
+            recordScrobbleHistory(
+                event: .skipped,
+                item: failedItem,
+                message: errorMessage ?? "Track not playable"
+            )
+        }
+
+        guard let failedIndex else {
             phase = .failed(errorMessage ?? "Track not playable.")
             return
         }
 
-        let nextIndex = currentIndex + 1
-        if queue.indices.contains(nextIndex) {
-            player.advanceToNextItem()
-            let events = startTrackState(at: nextIndex, playbackRate: 1)
-            configureAudioSession()
-            player.play()
-            dispatchLater(events)
-        } else if repeatMode == .all, !queue.isEmpty {
-            rebuildPlayerQueue(startAt: 0)
-        } else {
+        if queue.indices.contains(failedIndex) {
+            let failedURN = queue[failedIndex].trackURN
+            queue.remove(at: failedIndex)
+            orderedQueue.removeAll { $0.trackURN == failedURN }
+        }
+
+        player.pause()
+        player.removeAllItems()
+
+        guard !queue.isEmpty else {
             scrobbleEngine.stop()
-            phase = .failed(errorMessage ?? "Track not playable.")
+            phase = .idle
+            self.currentIndex = nil
+            elapsedSeconds = 0
             clearNowPlayingInfo()
             clearSavedPlaybackSnapshot()
+            setDebugStatus("Queue ended after skipping \(skippedUnplayableCount) unplayable track\(skippedUnplayableCount == 1 ? "" : "s")")
+            return
+        }
+
+        rebuildPlayerQueue(startAt: min(failedIndex, queue.count - 1))
+    }
+
+    private func handlePlaybackStalled() {
+        guard let item = currentItem else {
+            return
+        }
+
+        setDebugStatus("Buffering stream...", autoDismissAfter: 2_500_000_000)
+        let stalledTrackURN = item.trackURN
+        let stalledAt = elapsedSeconds
+
+        stalledRecoveryTask?.cancel()
+        stalledRecoveryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+            guard !Task.isCancelled,
+                  let self,
+                  self.currentItem?.trackURN == stalledTrackURN,
+                  self.isPlaying,
+                  self.elapsedSeconds <= stalledAt + 1.0 else {
+                return
+            }
+
+            self.setDebugStatus("Stream stalled, skipping: \(item.title)")
+            self.handlePlaybackProblem(errorMessage: "Stream stalled")
         }
     }
 
@@ -659,7 +785,7 @@ public final class PlayerScrobbleController: ObservableObject {
             updateNowPlayingInfo(for: item, playbackRate: 1)
         }
         let events = scrobbleEngine.tick(playbackTime: elapsedSeconds)
-        persistPlaybackSnapshot()
+        persistPlaybackSnapshot(force: !events.isEmpty)
         dispatchLater(events)
     }
 
@@ -834,16 +960,34 @@ public final class PlayerScrobbleController: ObservableObject {
                 switch event {
                 case .sendNowPlaying(let meta, let duration):
                     try await lastFMScrobbler.updateNowPlaying(meta: meta, durationSeconds: duration)
+                    pendingScrobbleCount = await lastFMScrobbler.pendingScrobbleCount()
+                    lastScrobbleError = nil
+                    recordScrobbleHistory(event: .nowPlaying, meta: meta, message: duration.map { "\($0)s" })
                     setDebugStatus("Now Playing sent", autoDismissAfter: 2_800_000_000)
                 case .sendScrobble(let meta, let timestamp):
                     try await lastFMScrobbler.scrobble(meta: meta, timestamp: timestamp)
                     let pending = await lastFMScrobbler.pendingScrobbleCount()
+                    pendingScrobbleCount = pending
+                    lastScrobbleSucceededAt = Date()
+                    lastScrobbleError = nil
+                    recordScrobbleHistory(
+                        event: pending == 0 ? .scrobbled : .queued,
+                        meta: meta,
+                        message: pending == 0 ? nil : "\(pending) pending"
+                    )
                     setDebugStatus(
                         pending == 0 ? "Track scrobbled" : "Scrobble queued (\(pending) pending)",
                         autoDismissAfter: pending == 0 ? 3_200_000_000 : nil
                     )
                 }
             } catch {
+                pendingScrobbleCount = await lastFMScrobbler.pendingScrobbleCount()
+                lastScrobbleError = error.localizedDescription
+                if case .sendNowPlaying(let meta, _) = event {
+                    recordScrobbleHistory(event: .failed, meta: meta, message: error.localizedDescription)
+                } else if case .sendScrobble(let meta, _) = event {
+                    recordScrobbleHistory(event: .failed, meta: meta, message: error.localizedDescription)
+                }
                 setDebugStatus("Scrobble error: \(error.localizedDescription)")
             }
         }
@@ -872,8 +1016,15 @@ public final class PlayerScrobbleController: ObservableObject {
         }
     }
 
-    private func persistPlaybackSnapshot() {
+    private func persistPlaybackSnapshot(force: Bool = true) {
         guard let currentIndex, queue.indices.contains(currentIndex), !queue.isEmpty else {
+            return
+        }
+
+        let now = Date()
+        if !force,
+           let lastSnapshotPersistedAt,
+           now.timeIntervalSince(lastSnapshotPersistedAt) < 15 {
             return
         }
 
@@ -890,6 +1041,7 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
         UserDefaults.standard.set(data, forKey: Storage.savedPlaybackSnapshotKey)
+        lastSnapshotPersistedAt = now
     }
 
     private func rebuildPlayerQueuePreservingCurrent(resumeAt seconds: TimeInterval, shouldPlay: Bool) {
@@ -945,9 +1097,81 @@ public final class PlayerScrobbleController: ObservableObject {
         UserDefaults.standard.set(data, forKey: Storage.recentlyPlayedKey)
     }
 
+    private func recordScrobbleHistory(
+        event: ScrobbleHistoryEvent,
+        item: QueueItem,
+        message: String? = nil
+    ) {
+        recordScrobbleHistory(
+            event: event,
+            title: item.title,
+            artist: item.artistDisplay,
+            trackURN: item.trackURN,
+            message: message
+        )
+    }
+
+    private func recordScrobbleHistory(
+        event: ScrobbleHistoryEvent,
+        meta: LastFMTrackMeta,
+        message: String? = nil
+    ) {
+        let trackURN = currentItem?.lastFM == meta ? currentItem?.trackURN : nil
+        recordScrobbleHistory(
+            event: event,
+            title: meta.track,
+            artist: meta.artist,
+            trackURN: trackURN,
+            message: message
+        )
+    }
+
+    private func recordScrobbleHistory(
+        event: ScrobbleHistoryEvent,
+        title: String,
+        artist: String,
+        trackURN: String?,
+        message: String?
+    ) {
+        scrobbleHistory.removeAll {
+            $0.event == event
+                && $0.trackURN == trackURN
+                && abs($0.occurredAt.timeIntervalSinceNow) < 1
+        }
+        scrobbleHistory.insert(
+            ScrobbleHistoryEntry(
+                event: event,
+                title: title,
+                artist: artist,
+                trackURN: trackURN,
+                message: message
+            ),
+            at: 0
+        )
+        if scrobbleHistory.count > 120 {
+            scrobbleHistory = Array(scrobbleHistory.prefix(120))
+        }
+        persistScrobbleHistory()
+    }
+
+    private func persistScrobbleHistory() {
+        guard let data = try? JSONEncoder().encode(scrobbleHistory) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Storage.scrobbleHistoryKey)
+    }
+
     private static func loadRecentlyPlayed() -> [SavedPlaybackTrack] {
         guard let data = UserDefaults.standard.data(forKey: Storage.recentlyPlayedKey),
               let decoded = try? JSONDecoder().decode([SavedPlaybackTrack].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private static func loadScrobbleHistory() -> [ScrobbleHistoryEntry] {
+        guard let data = UserDefaults.standard.data(forKey: Storage.scrobbleHistoryKey),
+              let decoded = try? JSONDecoder().decode([ScrobbleHistoryEntry].self, from: data) else {
             return []
         }
         return decoded

@@ -2,29 +2,34 @@ import Foundation
 
 public actor PlaybackResolver: PlaybackResolving {
     private let api: SoundCloudAPIClienting
+    private var streamCache: [String: ResolvedPlaybackStream] = [:]
 
     public init(api: SoundCloudAPIClienting) {
         self.api = api
     }
 
     public func resolvePlayableStream(for trackURN: String) async throws -> ResolvedPlaybackStream {
+        if let cached = streamCache[trackURN] {
+            return cached
+        }
+
         let streams = try await api.streams(trackURN: trackURN)
         let headers = try await api.streamRequestHeaders()
 
         if let url = streams.hlsAac160URL {
-            return ResolvedPlaybackStream(url: url, headers: headers)
+            return cache(ResolvedPlaybackStream(url: url, headers: headers), for: trackURN)
         }
 
         if let url = streams.hlsAac96URL {
-            return ResolvedPlaybackStream(url: url, headers: headers)
+            return cache(ResolvedPlaybackStream(url: url, headers: headers), for: trackURN)
         }
 
         if let url = streams.hlsMP3128URL {
-            return ResolvedPlaybackStream(url: url, headers: headers)
+            return cache(ResolvedPlaybackStream(url: url, headers: headers), for: trackURN)
         }
 
         if let url = streams.httpMP3128URL {
-            return ResolvedPlaybackStream(url: url, headers: headers)
+            return cache(ResolvedPlaybackStream(url: url, headers: headers), for: trackURN)
         }
 
         // Fallback for endpoint drift between /streams and legacy /stream.
@@ -33,6 +38,21 @@ public actor PlaybackResolver: PlaybackResolving {
             throw CloudScrobbleError.unsupportedStream
         }
 
-        return ResolvedPlaybackStream(url: fallbackURL, headers: headers)
+        return cache(ResolvedPlaybackStream(url: fallbackURL, headers: headers), for: trackURN)
+    }
+
+    public func prefetchPlayableStreams(for trackURNs: [String]) async {
+        let candidates = Array(trackURNs.filter { streamCache[$0] == nil }.prefix(4))
+        for trackURN in candidates {
+            _ = try? await resolvePlayableStream(for: trackURN)
+        }
+    }
+
+    private func cache(_ stream: ResolvedPlaybackStream, for trackURN: String) -> ResolvedPlaybackStream {
+        streamCache[trackURN] = stream
+        if streamCache.count > 120 {
+            streamCache.removeValue(forKey: streamCache.keys.first ?? trackURN)
+        }
+        return stream
     }
 }
