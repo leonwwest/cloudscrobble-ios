@@ -1,8 +1,8 @@
 import Foundation
 
 public enum ScrobbleEngineEvent: Equatable, Sendable {
-    case sendNowPlaying(meta: LastFMTrackMeta, duration: Int?)
-    case sendScrobble(meta: LastFMTrackMeta, timestamp: Int)
+    case sendNowPlaying(trackURN: String, meta: LastFMTrackMeta, duration: Int?)
+    case sendScrobble(trackURN: String, meta: LastFMTrackMeta, timestamp: Int)
 }
 
 public final class ScrobbleEngine {
@@ -32,7 +32,7 @@ public final class ScrobbleEngine {
         }
 
         state.didSendNowPlaying = true
-        return [.sendNowPlaying(meta: track.lastFM, duration: track.durationSeconds)]
+        return [.sendNowPlaying(trackURN: track.trackURN, meta: track.lastFM, duration: track.durationSeconds)]
     }
 
     public func pause() {
@@ -77,7 +77,7 @@ public final class ScrobbleEngine {
         }
 
         state.didScrobble = true
-        return [.sendScrobble(meta: currentTrack.lastFM, timestamp: startedAt)]
+        return [.sendScrobble(trackURN: currentTrack.trackURN, meta: currentTrack.lastFM, timestamp: startedAt)]
     }
 
     public func finish(playbackTime: TimeInterval) -> [ScrobbleEngineEvent] {
@@ -97,7 +97,7 @@ public final class ScrobbleEngine {
         }
 
         state.didScrobble = true
-        return [.sendScrobble(meta: currentTrack.lastFM, timestamp: startedAt)]
+        return [.sendScrobble(trackURN: currentTrack.trackURN, meta: currentTrack.lastFM, timestamp: startedAt)]
     }
 
     private func recordListenedTime(playbackTime: TimeInterval) {

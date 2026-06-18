@@ -22,16 +22,21 @@ Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
   - Load and play playlist tracks
   - My library from `/me` endpoints
 - `backend/` (Go token broker)
+  - Local development and smoke-test broker; production app builds use the Cloudflare Worker
   - `POST /oauth/soundcloud/exchange`
   - `POST /oauth/soundcloud/refresh`
   - `POST /oauth/soundcloud/client-credentials`
   - `GET /healthz`
+- `workers/soundcloud-token-broker/` (Cloudflare Worker)
+  - Production token broker used by current iOS builds
+  - SoundCloud OAuth + Last.fm session/scrobble/taste proxy endpoints
 
 ## Repo structure
 - `/Sources/CloudScrobbleCore` - protocols, models, services
 - `/Sources/CloudScrobbleApp` - SwiftUI app and view models
 - `/Tests/CloudScrobbleCoreTests` - unit tests for core logic
-- `/backend` - SoundCloud token broker backend
+- `/workers/soundcloud-token-broker` - production Cloudflare Worker token broker
+- `/backend` - local Go token broker used for development and smoke tests
 - `/ios` - generated Xcode iOS app project (`CloudScrobbleiOS.xcodeproj`)
 
 ## Environment variables (app)
@@ -47,7 +52,12 @@ export LASTFM_API_SECRET="..."
 
 `SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is optional for current app builds. If it is missing, invalid, or points at a private/local address, the app falls back to the deployed Worker URL above.
 
-Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in `backend/.env` or Cloudflare Worker secrets, because the iOS app talks to the token broker instead of sending the SoundCloud secret from the app.
+Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in Cloudflare Worker secrets or `backend/.env`, because the iOS app talks to the token broker instead of sending the SoundCloud secret from the app.
+
+## Token broker roles
+- Production path: `workers/soundcloud-token-broker` on Cloudflare Workers.
+- Local path: `backend` for fast local development and mocked broker smoke tests.
+- Keep endpoint behavior aligned when changing auth or Last.fm proxy contracts.
 
 ## Run backend
 ```bash
@@ -61,6 +71,7 @@ go run .
 ```bash
 swift test
 cd backend && go test ./...
+cd workers/soundcloud-token-broker && npm run check
 ```
 
 Optional live integration tests:
@@ -105,6 +116,7 @@ If "Connect SoundCloud" fails in-app, verify:
 
 ## End-to-end checks
 - Automated smoke: `./scripts/e2e_smoke.sh`
+- Optional Simulator UI smoke: `RUN_IOS_UI_TESTS=1 ./scripts/e2e_smoke.sh`
 - Full manual E2E guide: `docs/E2E_TESTING.md`
 
 ## Notes

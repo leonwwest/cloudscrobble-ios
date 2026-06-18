@@ -51,7 +51,7 @@ final class ScrobbleEngineTests: XCTestCase {
         let events = restoredEngine.tick(playbackTime: 151)
 
         XCTAssertTrue(events.contains(where: {
-            if case .sendScrobble(_, let timestamp) = $0 {
+            if case .sendScrobble(trackURN: _, meta: _, timestamp: let timestamp) = $0 {
                 return timestamp == 1_700_000_000
             }
             return false
@@ -75,7 +75,7 @@ final class ScrobbleEngineTests: XCTestCase {
         let finishEvents = engine.finish(playbackTime: 300)
 
         XCTAssertTrue(finishEvents.contains(where: {
-            if case .sendScrobble(_, let timestamp) = $0 {
+            if case .sendScrobble(trackURN: _, meta: _, timestamp: let timestamp) = $0 {
                 return timestamp == 1_700_000_000
             }
             return false

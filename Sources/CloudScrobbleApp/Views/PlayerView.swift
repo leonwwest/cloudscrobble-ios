@@ -8,6 +8,7 @@ struct PlayerView: View {
 
     @State private var isSeeking = false
     @State private var seekValue: Double = 0
+    @State private var showDiagnosticsSheet = false
 
     init(session: AppSessionViewModel) {
         self.session = session
@@ -18,10 +19,9 @@ struct PlayerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 nowPlayingCard
+                scrobbleSummaryCard
                 queueCard
                 recentlyPlayedCard
-                scrobbleHistoryCard
-                debugCard
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
@@ -29,6 +29,11 @@ struct PlayerView: View {
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 84)
+        }
+        .sheet(isPresented: $showDiagnosticsSheet) {
+            ScrobbleDiagnosticsView(controller: controller) {
+                Task { await controller.refreshLastFMDiagnostics() }
+            }
         }
     }
 
@@ -244,110 +249,34 @@ struct PlayerView: View {
         }
     }
 
-    @ViewBuilder
-    private var debugCard: some View {
-        if hasLastFMStatus {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 8) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .foregroundStyle(CloudTheme.sky)
-                    Text("Last.fm Status")
-                        .font(.system(.caption, design: .rounded).weight(.black))
-                        .foregroundStyle(CloudTheme.ink)
-                }
+    private var scrobbleSummaryCard: some View {
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: scrobbleStatusIcon)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(scrobbleStatusColor)
+                .frame(width: 42, height: 42)
+                .background(Circle().fill(scrobbleStatusColor.opacity(0.15)))
 
-                if !controller.debugStatus.isEmpty {
-                    Text(controller.debugStatus)
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.muted)
-                        .lineLimit(3)
-                }
-
-                if controller.pendingScrobbleCount > 0 {
-                    Text("\(controller.pendingScrobbleCount) pending scrobbles")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.warning)
-                        .lineLimit(1)
-                }
-
-                if let lastScrobbleSucceededAt = controller.lastScrobbleSucceededAt {
-                    Text("Last scrobble \(lastFMDateText(lastScrobbleSucceededAt))")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.muted)
-                        .lineLimit(1)
-                }
-
-                if let lastScrobbleError = controller.lastScrobbleError {
-                    Text(lastScrobbleError)
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.warning)
-                        .lineLimit(3)
-                }
-
-                if controller.skippedUnplayableCount > 0 {
-                    Text("\(controller.skippedUnplayableCount) unplayable track\(controller.skippedUnplayableCount == 1 ? "" : "s") skipped")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.warning)
-                        .lineLimit(2)
-                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Last.fm")
+                    .font(.system(.headline, design: .rounded).weight(.black))
+                    .foregroundStyle(CloudTheme.ink)
+                Text(scrobbleStatusText)
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .lineLimit(2)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(CloudTheme.elevated)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(CloudTheme.line, lineWidth: 1)
-            )
-        }
-    }
 
-    private var hasLastFMStatus: Bool {
-        !controller.debugStatus.isEmpty
-            || controller.pendingScrobbleCount > 0
-            || controller.lastScrobbleSucceededAt != nil
-            || controller.lastScrobbleError != nil
-            || controller.skippedUnplayableCount > 0
-    }
+            Spacer(minLength: 8)
 
-    @ViewBuilder
-    private var scrobbleHistoryCard: some View {
-        if !controller.scrobbleHistory.isEmpty || controller.skippedUnplayableCount > 0 {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.clipboard")
-                        .foregroundStyle(CloudTheme.sky)
-                    Text("Scrobble Verlauf")
-                        .font(.system(.headline, design: .rounded).weight(.bold))
-                        .foregroundStyle(CloudTheme.ink)
-
-                    Spacer()
-
-                    if !controller.scrobbleHistory.isEmpty {
-                        Button {
-                            controller.clearScrobbleHistory()
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .buttonStyle(IconCircleButtonStyle())
-                        .accessibilityLabel("Clear scrobble history")
-                    }
-                }
-
-                if controller.scrobbleHistory.isEmpty {
-                    Text("Noch keine Last.fm Events in dieser Installation.")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.muted)
-                } else {
-                    ForEach(controller.scrobbleHistory.prefix(20)) { entry in
-                        ScrobbleHistoryRow(entry: entry)
-                    }
-                }
+            Button {
+                showDiagnosticsSheet = true
+            } label: {
+                Label("Details", systemImage: "list.bullet.clipboard")
             }
-            .cloudCard()
+            .buttonStyle(SecondaryPillButtonStyle())
         }
+        .cloudCard()
     }
 
     private func artwork(for item: QueueItem, size: CGFloat = 184) -> some View {
@@ -401,6 +330,54 @@ struct PlayerView: View {
 
     private func lastFMDateText(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var scrobbleStatusText: String {
+        if !session.lastFMConnected {
+            return "Off. Connect Last.fm to send Now Playing and scrobbles."
+        }
+        if let lastScrobbleError = controller.lastScrobbleError, !lastScrobbleError.isEmpty {
+            return "Needs attention. Details explain the Last.fm error."
+        }
+        if controller.pendingScrobbleCount > 0 {
+            return "\(controller.pendingScrobbleCount) queued for retry."
+        }
+        if let lastScrobbleSucceededAt = controller.lastScrobbleSucceededAt {
+            return "Last scrobble \(lastFMDateText(lastScrobbleSucceededAt))."
+        }
+        if !controller.debugStatus.isEmpty {
+            return controller.debugStatus
+        }
+        return "Ready. Tracks scrobble after the listening threshold."
+    }
+
+    private var scrobbleStatusIcon: String {
+        if !session.lastFMConnected {
+            return "bolt.slash.fill"
+        }
+        if controller.lastScrobbleError != nil {
+            return "exclamationmark.triangle.fill"
+        }
+        if controller.pendingScrobbleCount > 0 {
+            return "tray.and.arrow.down.fill"
+        }
+        if controller.lastScrobbleSucceededAt != nil {
+            return "checkmark.circle.fill"
+        }
+        return "dot.radiowaves.left.and.right"
+    }
+
+    private var scrobbleStatusColor: Color {
+        if !session.lastFMConnected {
+            return CloudTheme.muted
+        }
+        if controller.lastScrobbleError != nil || controller.pendingScrobbleCount > 0 {
+            return CloudTheme.warning
+        }
+        if controller.lastScrobbleSucceededAt != nil {
+            return CloudTheme.success
+        }
+        return CloudTheme.sky
     }
 }
 
@@ -513,89 +490,6 @@ private struct RecentlyPlayedRow: View {
             .accessibilityLabel("Play \(track.title)")
         }
         .padding(.vertical, 5)
-    }
-}
-
-private struct ScrobbleHistoryRow: View {
-    let entry: ScrobbleHistoryEntry
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(color)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(color.opacity(0.15)))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(1)
-                Text(detailText)
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 6)
-
-            Text(entry.occurredAt.formatted(date: .omitted, time: .shortened))
-                .font(.system(.caption2, design: .rounded).weight(.bold))
-                .foregroundStyle(CloudTheme.muted)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var detailText: String {
-        var value = "\(entry.artist) - \(eventTitle)"
-        if let message = entry.message, !message.isEmpty {
-            value += " - \(message)"
-        }
-        return value
-    }
-
-    private var eventTitle: String {
-        switch entry.event {
-        case .nowPlaying:
-            return "Now Playing"
-        case .scrobbled:
-            return "Gesendet"
-        case .queued:
-            return "Queued"
-        case .failed:
-            return "Fehler"
-        case .skipped:
-            return "Skipped"
-        }
-    }
-
-    private var iconName: String {
-        switch entry.event {
-        case .nowPlaying:
-            return "dot.radiowaves.left.and.right"
-        case .scrobbled:
-            return "checkmark.circle.fill"
-        case .queued:
-            return "tray.and.arrow.down.fill"
-        case .failed:
-            return "exclamationmark.triangle.fill"
-        case .skipped:
-            return "forward.end.fill"
-        }
-    }
-
-    private var color: Color {
-        switch entry.event {
-        case .nowPlaying:
-            return CloudTheme.sky
-        case .scrobbled:
-            return CloudTheme.success
-        case .queued:
-            return CloudTheme.amber
-        case .failed, .skipped:
-            return CloudTheme.warning
-        }
     }
 }
 

@@ -9,29 +9,44 @@
 /* Begin PBXBuildFile section */
 		040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 421CA9E7D7C63273891A7A09 /* ContentView.swift */; };
 		093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB5DB08037BF4EF1CF0F9B9 /* AppSessionViewModel.swift */; };
-		1C0C7A6A1F6E4B0B9D02A110 /* CachedArtworkImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */; };
 		237D2BF4E5F124D6DEE8AD1C /* LastFMTasteTrackResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA24D60C9674EEFB772D3381 /* LastFMTasteTrackResolver.swift */; };
 		5ED8CE2C14E39498DC319917 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */; };
 		648052C470E4682C2CF3FCA9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0081E85A5E455368AC42AF4 /* Assets.xcassets */; };
 		6C844DAE628B034B2E8549BF /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9B161067FCB19C11C1C896 /* HomeViewModel.swift */; };
 		6FADA9730E06C31B6030E46B /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592DE3C63ECD225471E2D8B /* LibraryView.swift */; };
+		7318D4E5955CB35819B6F1E8 /* ScrobbleDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E4BEFE51C2C90FD339BF32 /* ScrobbleDiagnosticsView.swift */; };
 		7A91F81510002A398F4F5CF1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4B6C997767C3C1E1C8C196 /* HomeView.swift */; };
 		8B51A62405A2A6E69D2CDACE /* SystemBrowserClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */; };
 		8FC9CC9238F2497759F78F97 /* CloudScrobbleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8A1DF5D797BE565A7EBBB2DB /* CloudScrobbleCore */; };
+		97036DCEF1332C142CB30B0B /* CachedArtworkImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1478F9A7DAFB6BC9F430FCAA /* CachedArtworkImage.swift */; };
 		A14FD17852DD568885D94287 /* CloudScrobbleApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1254B5DAE487E6A56217C1F /* CloudScrobbleApplication.swift */; };
 		ABCF9277938E5E472C8E50E1 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1163495C1B831CFB2412ED /* DesignSystem.swift */; };
 		BCB1BB4BF8FEFD8D347000F9 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5618EE12101A75D1DB95E9F /* SearchView.swift */; };
 		C05CE3F7D8900CC1AABAD203 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C6076FD6F46BF4FD6068665 /* PlayerView.swift */; };
 		D2E2FEAEF21272792DD77D29 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D873D7E28C58F9186F3E9D67 /* AppConfig.swift */; };
 		E72767001D737592D1684BE1 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6C1182BCC2DD3BF42B8DF3 /* SearchViewModel.swift */; };
+		F51B2C46FF626A789FC80683 /* CloudScrobbleiOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D7744E6F4F4A39A9A454296 /* CloudScrobbleiOSUITests.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		4D969875D9142E7462A99BB4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 82DD790A481ED887179CBC6B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D7A6D0E4038B17E1B71ECEC;
+			remoteInfo = CloudScrobbleiOS;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		1478F9A7DAFB6BC9F430FCAA /* CachedArtworkImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedArtworkImage.swift; sourceTree = "<group>"; };
 		1D1965F27745F83C5FF15BC4 /* SystemBrowserClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemBrowserClient.swift; sourceTree = "<group>"; };
 		1F9B161067FCB19C11C1C896 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
-		1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedArtworkImage.swift; sourceTree = "<group>"; };
+		34E6FEE79A2260F122D76374 /* CloudScrobbleiOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CloudScrobbleiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D7744E6F4F4A39A9A454296 /* CloudScrobbleiOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudScrobbleiOSUITests.swift; sourceTree = "<group>"; };
 		421CA9E7D7C63273891A7A09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		52DA9610699F6681CE8BC048 /* CloudScrobble.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CloudScrobble.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		58E4BEFE51C2C90FD339BF32 /* ScrobbleDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrobbleDiagnosticsView.swift; sourceTree = "<group>"; };
 		7FBFAE71534475A1934D4817 /* CloudScrobble */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudScrobble; path = ..; sourceTree = SOURCE_ROOT; };
 		8C6076FD6F46BF4FD6068665 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
@@ -81,6 +96,7 @@
 			children = (
 				722A4C25D8DEE6C899A26E33 /* CloudScrobble */,
 				BC1AF2A267BDEB93728D3518 /* CloudScrobbleiOS */,
+				4AEBC6F541A1AABBC0CD0F29 /* CloudScrobbleiOSUITests */,
 				10B5DBCA016C3A08AFE1D848 /* Packages */,
 				AF2928F9069D5203EEAC98AF /* Products */,
 			);
@@ -96,6 +112,14 @@
 				BA6C1182BCC2DD3BF42B8DF3 /* SearchViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		4AEBC6F541A1AABBC0CD0F29 /* CloudScrobbleiOSUITests */ = {
+			isa = PBXGroup;
+			children = (
+				3D7744E6F4F4A39A9A454296 /* CloudScrobbleiOSUITests.swift */,
+			);
+			path = CloudScrobbleiOSUITests;
 			sourceTree = "<group>";
 		};
 		60ABE1AEEAA8BD76B654D654 /* OAuth */ = {
@@ -138,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				52DA9610699F6681CE8BC048 /* CloudScrobble.app */,
+				34E6FEE79A2260F122D76374 /* CloudScrobbleiOSUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -145,12 +170,13 @@
 		B517A83A594D8148BB9702D5 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				1C0C7A6A1F6E4B0B9D02A111 /* CachedArtworkImage.swift */,
+				1478F9A7DAFB6BC9F430FCAA /* CachedArtworkImage.swift */,
 				421CA9E7D7C63273891A7A09 /* ContentView.swift */,
 				BF1163495C1B831CFB2412ED /* DesignSystem.swift */,
 				CD4B6C997767C3C1E1C8C196 /* HomeView.swift */,
 				E592DE3C63ECD225471E2D8B /* LibraryView.swift */,
 				8C6076FD6F46BF4FD6068665 /* PlayerView.swift */,
+				58E4BEFE51C2C90FD339BF32 /* ScrobbleDiagnosticsView.swift */,
 				E5618EE12101A75D1DB95E9F /* SearchView.swift */,
 			);
 			path = Views;
@@ -187,6 +213,24 @@
 			productReference = 52DA9610699F6681CE8BC048 /* CloudScrobble.app */;
 			productType = "com.apple.product-type.application";
 		};
+		9AF2841755684D327CEB1EE3 /* CloudScrobbleiOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 57A2F157F036A35FCA44475F /* Build configuration list for PBXNativeTarget "CloudScrobbleiOSUITests" */;
+			buildPhases = (
+				90BD27B8BD4E9D8AF3CAEA42 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D9964DE088F4E0A08313ADCD /* PBXTargetDependency */,
+			);
+			name = CloudScrobbleiOSUITests;
+			packageProductDependencies = (
+			);
+			productName = CloudScrobbleiOSUITests;
+			productReference = 34E6FEE79A2260F122D76374 /* CloudScrobbleiOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -199,6 +243,9 @@
 					4D7A6D0E4038B17E1B71ECEC = {
 						DevelopmentTeam = X5PHH4UVL5;
 						ProvisioningStyle = Automatic;
+					};
+					9AF2841755684D327CEB1EE3 = {
+						TestTargetID = 4D7A6D0E4038B17E1B71ECEC;
 					};
 				};
 			};
@@ -220,6 +267,7 @@
 			projectRoot = "";
 			targets = (
 				4D7A6D0E4038B17E1B71ECEC /* CloudScrobbleiOS */,
+				9AF2841755684D327CEB1EE3 /* CloudScrobbleiOSUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -242,7 +290,7 @@
 			files = (
 				D2E2FEAEF21272792DD77D29 /* AppConfig.swift in Sources */,
 				093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */,
-				1C0C7A6A1F6E4B0B9D02A110 /* CachedArtworkImage.swift in Sources */,
+				97036DCEF1332C142CB30B0B /* CachedArtworkImage.swift in Sources */,
 				A14FD17852DD568885D94287 /* CloudScrobbleApplication.swift in Sources */,
 				040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */,
 				ABCF9277938E5E472C8E50E1 /* DesignSystem.swift in Sources */,
@@ -252,15 +300,51 @@
 				6FADA9730E06C31B6030E46B /* LibraryView.swift in Sources */,
 				5ED8CE2C14E39498DC319917 /* LibraryViewModel.swift in Sources */,
 				C05CE3F7D8900CC1AABAD203 /* PlayerView.swift in Sources */,
+				7318D4E5955CB35819B6F1E8 /* ScrobbleDiagnosticsView.swift in Sources */,
 				BCB1BB4BF8FEFD8D347000F9 /* SearchView.swift in Sources */,
 				E72767001D737592D1684BE1 /* SearchViewModel.swift in Sources */,
 				8B51A62405A2A6E69D2CDACE /* SystemBrowserClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		90BD27B8BD4E9D8AF3CAEA42 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F51B2C46FF626A789FC80683 /* CloudScrobbleiOSUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		D9964DE088F4E0A08313ADCD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D7A6D0E4038B17E1B71ECEC /* CloudScrobbleiOS */;
+			targetProxy = 4D969875D9142E7462A99BB4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		004EFEFC27B20B0E44CE3734 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.leonwestermeir.cloudscrobble.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CloudScrobbleiOS;
+			};
+			name = Release;
+		};
 		06F94A6FD85657C44C1AC6EA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -320,6 +404,25 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		3ECE7757D7B7ECFFC39BE013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.leonwestermeir.cloudscrobble.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CloudScrobbleiOS;
 			};
 			name = Debug;
 		};
@@ -443,6 +546,15 @@
 			buildConfigurations = (
 				06F94A6FD85657C44C1AC6EA /* Debug */,
 				EB5D609EBC0ED00A54D20E69 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		57A2F157F036A35FCA44475F /* Build configuration list for PBXNativeTarget "CloudScrobbleiOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3ECE7757D7B7ECFFC39BE013 /* Debug */,
+				004EFEFC27B20B0E44CE3734 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

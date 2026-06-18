@@ -19,9 +19,15 @@ struct LibraryView: View {
     @ObservedObject private var playerController: PlayerScrobbleController
     @StateObject private var viewModel: LibraryViewModel
     @State private var scope: LibraryScope = .overview
+    private let onOpenSearch: (() -> Void)?
 
-    init(session: AppSessionViewModel, viewModel: LibraryViewModel) {
+    init(
+        session: AppSessionViewModel,
+        viewModel: LibraryViewModel,
+        onOpenSearch: (() -> Void)? = nil
+    ) {
         self.session = session
+        self.onOpenSearch = onOpenSearch
         _playerController = ObservedObject(wrappedValue: session.playerController)
         _viewModel = StateObject(wrappedValue: viewModel)
     }
@@ -66,22 +72,26 @@ struct LibraryView: View {
                     Task { await viewModel.refresh() }
                 }
 
-                libraryScopeTabs
-
-                if let errorMessage = viewModel.errorMessage {
-                    LibraryMessageBanner(message: errorMessage)
-                }
-
-                if viewModel.isLoading && !hasLibraryContent {
-                    LoadingResultSkeletonList(count: 5)
-                } else if !hasLibraryContent {
-                    EmptyStateCard(
-                        icon: "books.vertical",
-                        title: "No library content",
-                        subtitle: "Connect SoundCloud with full login to load your playlists and likes."
-                    )
+                if isPublicLibraryLocked {
+                    publicModeLockedView
                 } else {
-                    scopedContent
+                    libraryScopeTabs
+
+                    if let errorMessage = viewModel.errorMessage {
+                        LibraryMessageBanner(message: errorMessage)
+                    }
+
+                    if viewModel.isLoading && !hasLibraryContent {
+                        LoadingResultSkeletonList(count: 5)
+                    } else if !hasLibraryContent {
+                        EmptyStateCard(
+                            icon: "books.vertical",
+                            title: "No library content",
+                            subtitle: "Connect SoundCloud with full login to load your playlists and likes."
+                        )
+                    } else {
+                        scopedContent
+                    }
                 }
             }
             .padding(.vertical, 10)
@@ -92,6 +102,7 @@ struct LibraryView: View {
             Color.clear.frame(height: 84)
         }
         .task(id: libraryRefreshID) {
+            guard !isPublicLibraryLocked else { return }
             await viewModel.refresh()
         }
         .sheet(item: selectedPlaylistBinding) { data in
@@ -156,6 +167,75 @@ struct LibraryView: View {
             || !viewModel.myLikedPlaylists.isEmpty
             || !viewModel.stationMixes.isEmpty
             || !playerController.recentlyPlayed.isEmpty
+    }
+
+    private var isPublicLibraryLocked: Bool {
+        session.soundCloudConnected && session.soundCloudPublicMode && !session.soundCloudMockMode
+    }
+
+    private var publicModeLockedView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(CloudTheme.sky)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(CloudTheme.sky.opacity(0.15)))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Library braucht Full Login")
+                        .font(.system(.headline, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
+                    Text("Public Mode kann öffentliche Tracks suchen und abspielen, hat aber keinen Zugriff auf deine Likes, Playlists oder dein Profil.")
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineSpacing(2)
+                }
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await session.reconnectSoundCloud() }
+                    } label: {
+                        Label("Full Login", systemImage: "link.circle.fill")
+                    }
+                    .buttonStyle(PrimaryPillButtonStyle())
+
+                    Button {
+                        onOpenSearch?()
+                    } label: {
+                        Label("Search public tracks", systemImage: "magnifyingglass")
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+                }
+
+                VStack(spacing: 8) {
+                    Button {
+                        Task { await session.reconnectSoundCloud() }
+                    } label: {
+                        Label("Full Login", systemImage: "link.circle.fill")
+                    }
+                    .buttonStyle(PrimaryPillButtonStyle())
+
+                    Button {
+                        onOpenSearch?()
+                    } label: {
+                        Label("Search public tracks", systemImage: "magnifyingglass")
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+                }
+            }
+
+            if !playerController.recentlyPlayed.isEmpty {
+                Divider()
+                    .overlay(CloudTheme.line)
+
+                recentSection
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cloudCard()
     }
 
     private var libraryScopeTabs: some View {

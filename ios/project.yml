@@ -50,6 +50,20 @@ targets:
     dependencies:
       - package: CloudScrobblePackage
         product: CloudScrobbleCore
+  CloudScrobbleiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: CloudScrobbleiOSUITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonwestermeir.cloudscrobble.ios.uitests
+        TEST_TARGET_NAME: CloudScrobbleiOS
+        SWIFT_VERSION: 6.0
+    dependencies:
+      - target: CloudScrobbleiOS
 schemes:
   CloudScrobbleiOS:
     build:
@@ -57,3 +71,6 @@ schemes:
         CloudScrobbleiOS: all
     run:
       config: Debug
+    test:
+      targets:
+        - CloudScrobbleiOSUITests

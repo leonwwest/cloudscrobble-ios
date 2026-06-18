@@ -1,6 +1,8 @@
-# CloudScrobble Token Broker
+# CloudScrobble Local Token Broker
 
-Minimal backend for SoundCloud OAuth token exchange/refresh.
+Local Go backend for SoundCloud OAuth token exchange/refresh and Last.fm proxy development.
+
+Production iOS builds use the Cloudflare Worker in `workers/soundcloud-token-broker`. Keep this Go service as a local dev and smoke-test mirror, not as the primary deployment target.
 
 ## Endpoints
 - `POST /oauth/soundcloud/exchange`
@@ -14,6 +16,9 @@ cp .env.example .env
 export $(grep -v '^#' .env | xargs)
 go run .
 ```
+
+## Test role
+`scripts/e2e_smoke.sh` starts this service against a mocked SoundCloud token upstream to verify exchange, refresh, and client-credentials behavior without live credentials.
 
 ## Exchange payload
 ```json

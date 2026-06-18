@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var showLastFMSheet = false
     @State private var showSettingsSheet = false
     @State private var showOnboardingSheet = false
+    @State private var showDiagnosticsSheet = false
     @State private var deckVisible = false
     @State private var pendingLastFMScrobbles = 0
     @State private var selectedTab: AppTab = .home
@@ -43,7 +44,15 @@ struct ContentView: View {
                             .tabItem { Label("Search", systemImage: "magnifyingglass") }
                             .tag(AppTab.search)
 
-                        LibraryView(session: session, viewModel: LibraryViewModel(session: session))
+                        LibraryView(
+                            session: session,
+                            viewModel: LibraryViewModel(session: session),
+                            onOpenSearch: {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    selectedTab = .search
+                                }
+                            }
+                        )
                             .tabItem { Label("Library", systemImage: "books.vertical") }
                             .tag(AppTab.library)
 
@@ -82,7 +91,6 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .dynamicTypeSize(.medium ... .large)
         .sheet(isPresented: $showLastFMSheet) {
             lastFMSheet
         }
@@ -99,7 +107,7 @@ struct ContentView: View {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.84)) {
                 deckVisible = true
             }
-            if !didShowOnboarding {
+            if !didShowOnboarding || ProcessInfo.processInfo.arguments.contains("-cloudscrobble-show-onboarding") {
                 didShowOnboarding = true
                 showOnboardingSheet = true
             }
@@ -166,81 +174,28 @@ struct ContentView: View {
     }
 
     private var connectionActions: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                soundCloudButton
-                    .layoutPriority(1)
-                lastFMButton
-                    .fixedSize(horizontal: true, vertical: false)
-                modeButtons
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    soundCloudButton
-                        .layoutPriority(1)
-                    lastFMButton
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-
-                modeButtons
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private var soundCloudButton: some View {
-        Button {
-            Task {
-                if session.soundCloudConnected {
-                    await session.disconnectSoundCloud()
-                } else {
-                    await session.connectSoundCloud()
-                }
-            }
-        } label: {
-            Label(session.soundCloudConnected ? "Disconnect" : "Connect", systemImage: session.soundCloudConnected ? "xmark.circle.fill" : "link.circle.fill")
-        }
-        .buttonStyle(PrimaryPillButtonStyle())
-    }
-
-    private var lastFMButton: some View {
-        Button {
-            Task {
+        ConnectionSetupPanel(
+            session: session,
+            onFullLogin: {
+                Task { await session.connectSoundCloud() }
+            },
+            onPublicMode: {
+                Task { await session.connectSoundCloudPublicMode() }
+            },
+            onDemoMode: {
+                Task { await session.connectSoundCloudDemoMode() }
+            },
+            onDisconnectSoundCloud: {
+                Task { await session.disconnectSoundCloud() }
+            },
+            onLastFM: {
                 if session.lastFMConnected {
-                    await session.disconnectLastFM()
+                    Task { await session.disconnectLastFM() }
                 } else {
                     showLastFMSheet = true
                 }
             }
-        } label: {
-            Label(session.lastFMConnected ? "Last.fm Off" : "Last.fm", systemImage: session.lastFMConnected ? "bolt.slash.fill" : "dot.radiowaves.left.and.right")
-        }
-        .buttonStyle(SecondaryPillButtonStyle())
-    }
-
-    @ViewBuilder
-    private var modeButtons: some View {
-        if !session.soundCloudConnected {
-            HStack(spacing: 8) {
-                Button {
-                    Task { await session.connectSoundCloudPublicMode() }
-                } label: {
-                    Image(systemName: "globe")
-                }
-                .buttonStyle(IconCircleButtonStyle())
-                .accessibilityLabel("Use SoundCloud Public Mode")
-
-                Button {
-                    Task { await session.connectSoundCloudDemoMode() }
-                } label: {
-                    Image(systemName: "sparkles")
-                }
-                .buttonStyle(IconCircleButtonStyle())
-                .accessibilityLabel("Use Demo Mode")
-            }
-        }
+        )
     }
 
     private func statusToast(message: String) -> some View {
@@ -286,6 +241,7 @@ struct ContentView: View {
                         SettingsInfoRow(title: "SoundCloud", value: session.soundCloudModeLabel)
                         SettingsInfoRow(title: "Last.fm", value: session.lastFMConnected ? "Connected" : "Off")
                         SettingsInfoRow(title: "Network", value: session.networkStatusLabel)
+                        SettingsInfoRow(title: "Playback", value: playbackStatusText)
                         SettingsInfoRow(title: "Pending scrobbles", value: "\(pendingLastFMScrobbles)")
                         if let lastScrobbleSucceededAt = session.playerController.lastScrobbleSucceededAt {
                             SettingsInfoRow(title: "Last scrobble", value: scrobbleDateText(lastScrobbleSucceededAt))
@@ -305,28 +261,28 @@ struct ContentView: View {
                         connectionActions
 
                         if session.soundCloudConnected && session.soundCloudPublicMode {
-                            Text("Public Mode active: search/playback enabled, private /me endpoints disabled.")
-                                .font(.system(.caption2, design: .serif))
-                                .foregroundStyle(CloudTheme.muted)
+                            SettingsHintText("Public Mode keeps Search and playback available, while Library stays locked until full SoundCloud login.")
                         }
 
                         if session.soundCloudConnected && session.soundCloudMockMode {
-                            Text("Demo Mode active: mock catalog only. Connect SoundCloud or Public Mode for real audio.")
-                                .font(.system(.caption2, design: .serif))
-                                .foregroundStyle(CloudTheme.muted)
+                            SettingsHintText("Demo Mode uses local sample data only. Switch to Public Mode or full login for real audio.")
                         }
 
                         if !session.isConfigured {
-                            Text("Set SoundCloud app config values and rebuild the app.")
-                                .font(.system(.caption2, design: .serif))
-                                .foregroundStyle(CloudTheme.warning)
-                                .lineLimit(2)
+                            SettingsHintText("Set SoundCloud app config values and rebuild the app.", isWarning: true)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 10) {
+                        Button {
+                            showDiagnosticsSheet = true
+                        } label: {
+                            Label("Open diagnostics", systemImage: "stethoscope")
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+
                         Button {
                             Task {
                                 await session.refreshConnectionState()
@@ -403,6 +359,9 @@ struct ContentView: View {
             .task {
                 await refreshDiagnostics()
             }
+            .sheet(isPresented: $showDiagnosticsSheet) {
+                diagnosticsSheet
+            }
         }
         .presentationDetents([.medium, .large])
     }
@@ -415,7 +374,7 @@ struct ContentView: View {
                         Text("CloudScrobble einrichten")
                             .font(.system(.title2, design: .rounded).weight(.black))
                             .foregroundStyle(CloudTheme.ink)
-                        Text("Verbinde SoundCloud fürs echte Playback und Last.fm für Now Playing plus Scrobbles.")
+                        Text("Wähle zuerst, wie du SoundCloud nutzen willst. Last.fm kannst du direkt danach für Scrobbles verbinden.")
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
                             .foregroundStyle(CloudTheme.muted)
                             .lineSpacing(2)
@@ -433,8 +392,8 @@ struct ContentView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         SettingsInfoRow(title: "Feed", value: "Du kannst Tracks ausblenden und Artists boosten oder reduzieren.")
-                        SettingsInfoRow(title: "Scrobbles", value: "Im Player siehst du gesendete, queued und fehlgeschlagene Events.")
-                        SettingsInfoRow(title: "Offline", value: "Die App zeigt Netzwerkstatus und cached Cover im Feed.")
+                        SettingsInfoRow(title: "Scrobbles", value: "Der Player bleibt ruhig; Details findest du in Diagnose.")
+                        SettingsInfoRow(title: "Offline", value: "Scrobbles bleiben queued und werden später gesendet.")
                     }
                     .cloudCard()
 
@@ -472,12 +431,14 @@ struct ContentView: View {
     private var lastFMSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Last.fm Credentials")
+                Text("Last.fm verbinden")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
-                Text("Required for `updateNowPlaying` and `track.scrobble`.")
-                    .font(.system(.caption, design: .rounded))
+                Text("CloudScrobble nutzt Last.fm für Now Playing und Scrobbles. Playback funktioniert auch ohne Last.fm.")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
+
+                LastFMSecurityNote()
 
                 TextField("Last.fm username", text: $lastFMUsername)
                     .cloudCredentialField()
@@ -544,6 +505,12 @@ struct ContentView: View {
         .presentationDetents([.fraction(0.50), .medium])
     }
 
+    private var diagnosticsSheet: some View {
+        ScrobbleDiagnosticsView(controller: session.playerController) {
+            Task { await refreshDiagnostics() }
+        }
+    }
+
     private func refreshDiagnostics() async {
         await session.playerController.refreshLastFMDiagnostics()
         pendingLastFMScrobbles = await session.pendingLastFMScrobbleCount()
@@ -551,6 +518,235 @@ struct ContentView: View {
 
     private func scrobbleDateText(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var playbackStatusText: String {
+        if session.playerController.pendingScrobbleCount > 0 {
+            return "\(session.playerController.pendingScrobbleCount) queued scrobbles"
+        }
+        if session.playerController.lastScrobbleError != nil {
+            return "Last.fm needs attention"
+        }
+        if session.playerController.lastScrobbleSucceededAt != nil {
+            return "Scrobbling is working"
+        }
+        return session.lastFMConnected ? "Ready to scrobble" : "Playback only"
+    }
+}
+
+private struct ConnectionSetupPanel: View {
+    @ObservedObject var session: AppSessionViewModel
+
+    let onFullLogin: () -> Void
+    let onPublicMode: () -> Void
+    let onDemoMode: () -> Void
+    let onDisconnectSoundCloud: () -> Void
+    let onLastFM: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if session.soundCloudConnected {
+                ConnectionModeRow(
+                    title: activeModeTitle,
+                    subtitle: activeModeSubtitle,
+                    icon: activeModeIcon,
+                    badge: "Active",
+                    isActive: true,
+                    isDisabled: true,
+                    action: {}
+                )
+
+                HStack(spacing: 8) {
+                    Button(action: onDisconnectSoundCloud) {
+                        Label("Disconnect SoundCloud", systemImage: "xmark.circle.fill")
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+
+                    if session.soundCloudPublicMode || session.soundCloudMockMode {
+                        Button(action: onFullLogin) {
+                            Label("Full Login", systemImage: "link.circle.fill")
+                        }
+                        .buttonStyle(PrimaryPillButtonStyle())
+                    }
+                }
+            } else {
+                ConnectionModeRow(
+                    title: "Full SoundCloud Login",
+                    subtitle: "Real playback, personal feed, likes, playlists and library.",
+                    icon: "link.circle.fill",
+                    badge: "Best",
+                    isPrimary: true,
+                    action: onFullLogin
+                )
+
+                ConnectionModeRow(
+                    title: "Public Test Mode",
+                    subtitle: "Real public search and playback. Library stays locked.",
+                    icon: "globe",
+                    action: onPublicMode
+                )
+
+                ConnectionModeRow(
+                    title: "Demo Preview",
+                    subtitle: "Local sample catalog only. No SoundCloud audio.",
+                    icon: "sparkles",
+                    action: onDemoMode
+                )
+            }
+
+            Divider()
+                .overlay(CloudTheme.line)
+
+            ConnectionModeRow(
+                title: session.lastFMConnected ? "Last.fm Connected" : "Last.fm Scrobbling",
+                subtitle: session.lastFMConnected
+                    ? "Now Playing and scrobbles are enabled."
+                    : "Optional. Adds Now Playing, scrobble history and offline queue.",
+                icon: session.lastFMConnected ? "checkmark.seal.fill" : "dot.radiowaves.left.and.right",
+                badge: session.lastFMConnected ? "On" : nil,
+                isActive: session.lastFMConnected,
+                action: onLastFM
+            )
+        }
+    }
+
+    private var activeModeTitle: String {
+        if session.soundCloudMockMode {
+            return "Demo Preview"
+        }
+        if session.soundCloudPublicMode {
+            return "Public Test Mode"
+        }
+        return "Full SoundCloud Login"
+    }
+
+    private var activeModeSubtitle: String {
+        if session.soundCloudMockMode {
+            return "Sample catalog only. Connect SoundCloud for real streams."
+        }
+        if session.soundCloudPublicMode {
+            return "Public search and playback are available. Library needs full login."
+        }
+        return "Personal feed, likes, playlists and playback are available."
+    }
+
+    private var activeModeIcon: String {
+        if session.soundCloudMockMode {
+            return "sparkles"
+        }
+        if session.soundCloudPublicMode {
+            return "globe"
+        }
+        return "link.circle.fill"
+    }
+}
+
+private struct ConnectionModeRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    var badge: String?
+    var isPrimary = false
+    var isActive = false
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(isPrimary ? .white : CloudTheme.sky)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(isPrimary ? CloudTheme.sky : CloudTheme.sky.opacity(0.15)))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(title)
+                            .font(.system(.subheadline, design: .rounded).weight(.black))
+                            .foregroundStyle(CloudTheme.ink)
+                            .lineLimit(2)
+
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                .foregroundStyle(isPrimary ? .white : CloudTheme.sky)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule(style: .continuous).fill(CloudTheme.sky.opacity(isPrimary ? 0.95 : 0.16)))
+                        }
+                    }
+
+                    Text(subtitle)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: isActive ? "checkmark.circle.fill" : "chevron.right")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(isActive ? CloudTheme.success : CloudTheme.muted)
+                    .padding(.top, 3)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isPrimary ? CloudTheme.sky.opacity(0.13) : CloudTheme.elevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isPrimary ? CloudTheme.sky.opacity(0.35) : CloudTheme.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct SettingsHintText: View {
+    let text: String
+    var isWarning = false
+
+    init(_ text: String, isWarning: Bool = false) {
+        self.text = text
+        self.isWarning = isWarning
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(.caption, design: .rounded).weight(.semibold))
+            .foregroundStyle(isWarning ? CloudTheme.warning : CloudTheme.muted)
+            .lineLimit(3)
+    }
+}
+
+private struct LastFMSecurityNote: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Was gespeichert wird", systemImage: "lock.shield.fill")
+                .font(.system(.caption, design: .rounded).weight(.black))
+                .foregroundStyle(CloudTheme.ink)
+
+            Text("Dein Passwort wird nur an den Token-Broker geschickt, um bei Last.fm einen Session-Key zu holen. Die App speichert danach nur diesen Session-Key im Keychain.")
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(CloudTheme.muted)
+                .lineSpacing(2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CloudTheme.elevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CloudTheme.line, lineWidth: 1)
+        )
     }
 }
 

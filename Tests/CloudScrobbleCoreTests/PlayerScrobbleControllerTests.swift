@@ -61,6 +61,23 @@ final class PlayerScrobbleControllerTests: XCTestCase {
         XCTAssertNil(controller.lastScrobbleError)
     }
 
+    func testTrackSwitchCancelsStaleNowPlayingUpdate() async {
+        let scrobbler = DelayedNowPlayingScrobbler(delayNanoseconds: 150_000_000)
+        let controller = PlayerScrobbleController(lastFMScrobbler: scrobbler)
+
+        let first = makeQueueItem(id: "first")
+        let second = makeQueueItem(id: "second")
+
+        controller.loadQueue([first], startAt: 0)
+        await Task.yield()
+        controller.loadQueue([second], startAt: 0)
+
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        let nowPlaying = await scrobbler.nowPlayingTracks()
+        XCTAssertEqual(nowPlaying, [second.lastFM])
+    }
+
     private func makeQueueItem(id: String) -> QueueItem {
         QueueItem(
             trackURN: "soundcloud:tracks:test:\(id)",
@@ -94,5 +111,31 @@ private actor DiagnosticScrobbler: LastFMScrobbleSending {
 
     func pendingScrobbleCount() async -> Int {
         pendingCountValue
+    }
+}
+
+private actor DelayedNowPlayingScrobbler: LastFMScrobbleSending {
+    private let delayNanoseconds: UInt64
+    private var nowPlayingValues: [LastFMTrackMeta] = []
+
+    init(delayNanoseconds: UInt64) {
+        self.delayNanoseconds = delayNanoseconds
+    }
+
+    func updateNowPlaying(meta: LastFMTrackMeta, durationSeconds: Int?) async throws {
+        try await Task.sleep(nanoseconds: delayNanoseconds)
+        nowPlayingValues.append(meta)
+    }
+
+    func scrobble(meta: LastFMTrackMeta, timestamp: Int) async throws {}
+
+    func flushPendingScrobbles() async throws {}
+
+    func pendingScrobbleCount() async -> Int {
+        0
+    }
+
+    func nowPlayingTracks() -> [LastFMTrackMeta] {
+        nowPlayingValues
     }
 }

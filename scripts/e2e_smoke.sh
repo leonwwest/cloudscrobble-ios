@@ -12,6 +12,19 @@ cd "$ROOT_DIR/backend"
 GOCACHE="$ROOT_DIR/.cache/go-build" go test ./...
 cd "$ROOT_DIR"
 
+echo "==> Worker TypeScript check"
+npm --prefix "$ROOT_DIR/workers/soundcloud-token-broker" run check
+
+if [[ "${RUN_IOS_UI_TESTS:-0}" == "1" ]]; then
+  echo "==> iOS UI tests"
+  (cd "$ROOT_DIR/ios" && xcodegen generate)
+  xcodebuild \
+    -project "$ROOT_DIR/ios/CloudScrobbleiOS.xcodeproj" \
+    -scheme CloudScrobbleiOS \
+    -destination "${IOS_TEST_DESTINATION:-platform=iOS Simulator,name=iPhone 16}" \
+    test
+fi
+
 echo "==> Token broker mock E2E"
 cat > /tmp/mock_soundcloud_token.py <<'PY'
 from http.server import BaseHTTPRequestHandler, HTTPServer

@@ -39,7 +39,20 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "9AF2841755684D327CEB1EE3"
+               BuildableName = "CloudScrobbleiOSUITests.xctest"
+               BlueprintName = "CloudScrobbleiOSUITests"
+               ReferencedContainer = "container:CloudScrobbleiOS.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

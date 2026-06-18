@@ -1,6 +1,8 @@
 # CloudScrobble SoundCloud Token Broker Worker
 
-Cloudflare Workers version of the SoundCloud token broker used by the iOS app.
+Cloudflare Workers version of the SoundCloud and Last.fm token broker used by production iOS app builds.
+
+The Go service in `../../backend` is kept as a local development and smoke-test mirror. Use this Worker as the primary deployment target.
 
 ## Endpoints
 

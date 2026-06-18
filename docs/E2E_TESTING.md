@@ -21,7 +21,11 @@
 
 ## 2) Configure env files
 
-### `/backend/.env`
+### Production broker
+Current iOS builds default to the deployed Cloudflare Worker in `workers/soundcloud-token-broker`. Store production secrets with `wrangler secret put`, not in app env files.
+
+### Local `/backend/.env`
+Use the Go backend only for local broker development and smoke tests:
 ```env
 ADDR=:8787
 SOUNDCLOUD_CLIENT_ID=...
@@ -50,7 +54,18 @@ Run:
 This validates:
 - Swift core build + tests
 - Go backend build/tests
+- Cloudflare Worker TypeScript build
 - Token broker health and OAuth exchange/refresh/client-credentials path (mocked SoundCloud token upstream)
+
+Optional Simulator UI smoke:
+```bash
+RUN_IOS_UI_TESTS=1 ./scripts/e2e_smoke.sh
+```
+
+Set `IOS_TEST_DESTINATION` if your simulator name differs:
+```bash
+IOS_TEST_DESTINATION='platform=iOS Simulator,name=iPhone 16 Pro' RUN_IOS_UI_TESTS=1 ./scripts/e2e_smoke.sh
+```
 
 Optional live SoundCloud integration test (requires valid credentials + running broker):
 ```bash
@@ -59,7 +74,9 @@ SOUNDCLOUD_LIVE_TESTS=1 swift test --filter SoundCloudLiveIntegrationTests
 
 ## 4) Real API run (manual E2E)
 
-### Start token broker
+### Start local token broker
+For production-like testing, prefer the deployed Worker URL. Use the Go backend when you need local request logs or are changing the broker contract.
+
 ```bash
 cd backend
 export $(grep -v '^#' .env | xargs)
