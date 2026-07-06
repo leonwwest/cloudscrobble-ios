@@ -118,20 +118,28 @@ python3 /tmp/mock_soundcloud_token.py >/tmp/mock_soundcloud_token.log 2>&1 &
 MOCK_PID=$!
 
 cd "$ROOT_DIR/backend"
-ADDR=:8791 SOUNDCLOUD_CLIENT_ID=fake_client SOUNDCLOUD_CLIENT_SECRET=fake_secret SOUNDCLOUD_TOKEN_URL=http://127.0.0.1:19001/oauth/token ALLOWED_ORIGIN='*' go run . >/tmp/cloudscrobble_broker.log 2>&1 &
+ADDR=:8791 SOUNDCLOUD_CLIENT_ID=fake_client SOUNDCLOUD_CLIENT_SECRET=fake_secret SOUNDCLOUD_TOKEN_URL=http://127.0.0.1:19001/oauth/token ALLOWED_ORIGIN='*' APP_API_KEY=dev-test-key go run . >/tmp/cloudscrobble_broker.log 2>&1 &
 BROKER_PID=$!
 cd "$ROOT_DIR"
 
 wait_for_http http://127.0.0.1:8791/healthz 30
 
 HEALTH="$(curl -sf http://127.0.0.1:8791/healthz)"
-EXCHANGE="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/exchange -H 'Content-Type: application/json' -d '{"code":"auth_code","codeVerifier":"pkce_verifier","redirectUri":"cloudscrobble://oauth"}')"
-REFRESH="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"mock_refresh_token"}')"
-CLIENT_CREDENTIALS="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -d '{}')"
+EXCHANGE="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/exchange -H 'Content-Type: application/json' -H 'X-API-Key: dev-''test-key' -d '{"code":"auth_code","codeVerifier":"pkce_verifier","redirectUri":"cloudscrobble://oauth"}')"
+REFRESH="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/refresh -H 'Content-Type: application/json' -H 'X-API-Key: dev-''test-key' -d '{"refreshToken":"mock_refresh_token"}')"
+CLIENT_CREDENTIALS="$(curl -sf -X POST http://127.0.0.1:8791/oauth/soundcloud/client-credentials -H 'Content-Type: application/json' -H 'X-API-Key: dev-''test-key' -d '{}')"
+
+# Verify the API-key gate rejects requests without the header.
+GATE_STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8791/oauth/soundcloud/exchange -H 'Content-Type: application/json' -d '{}')
+if [[ "$GATE_STATUS" != "401" ]]; then
+  echo "API-key gate failed: expected 401 without X-API-Key, got $GATE_STATUS" >&2
+  exit 1
+fi
 
 echo "health: $HEALTH"
 echo "exchange: $EXCHANGE"
 echo "refresh: $REFRESH"
 echo "client_credentials: $CLIENT_CREDENTIALS"
+echo "api-key gate: OK (401 without header)"
 
 echo "==> Smoke tests passed"

@@ -1,16 +1,26 @@
-import { md5 } from "js-md5";
-
-interface Env {
-  SOUNDCLOUD_CLIENT_ID?: string;
-  SOUNDCLOUD_CLIENT_SECRET?: string;
-  SOUNDCLOUD_TOKEN_URL?: string;
-  LASTFM_API_KEY?: string;
-  LASTFM_API_SECRET?: string;
-  LASTFM_API_URL?: string;
-  ALLOWED_ORIGIN?: string;
-  RATE_LIMIT_PER_MINUTE?: string;
-  RATE_LIMIT_WINDOW_SECONDS?: string;
-}
+import {
+  APP_API_KEY_HEADER,
+  type Env,
+  type Result,
+  type BrokerConfig,
+  type LastFMConfig,
+  type RateLimitResult,
+  loadConfig,
+  loadLastFMConfig,
+  loadRateLimitConfig,
+  signLastFM,
+  clampLimit,
+  readRecord,
+  readArray,
+  readString,
+  readNumber,
+  isLastFMError,
+  normalizeRecentTracks,
+  normalizeTopArtists,
+  isValidHTTPURL,
+  requireAppAPIKey,
+  rateLimitKey
+} from "./lib";
 
 interface ExchangeRequest {
   code?: string;
@@ -50,11 +60,6 @@ interface LastFMScrobblePayload {
   timestamp?: number;
 }
 
-interface RateLimitBucket {
-  count: number;
-  resetAt: number;
-}
-
 interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
@@ -68,7 +73,6 @@ type RequestWithCF = Request & {
 const VERSION = "2026.06.13.1";
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 const MAX_UPSTREAM_JSON_BYTES = 2 * 1024 * 1024;
-const rateLimitBuckets = new Map<string, RateLimitBucket>();
 
 export default {
   async fetch(request: Request, env: Env, ctx: WorkerExecutionContext): Promise<Response> {
@@ -109,23 +113,29 @@ export default {
 };
 
 async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
-    if (url.pathname === "/healthz" && request.method === "GET") {
-      return json({
-        status: "ok",
-        version: VERSION,
-        services: {
-          soundcloud: Boolean(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET),
-          lastfm: Boolean(env.LASTFM_API_KEY && env.LASTFM_API_SECRET)
-        },
-        rateLimit: loadRateLimitConfig(env)
-      });
-    }
+  if (url.pathname === "/healthz" && request.method === "GET") {
+    return json({
+      status: "ok",
+      version: VERSION,
+      services: {
+        soundcloud: Boolean(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET),
+        lastfm: Boolean(env.LASTFM_API_KEY && env.LASTFM_API_SECRET)
+      },
+      rateLimit: loadRateLimitConfig(env),
+      appAPIKeyConfigured: Boolean(env.APP_API_KEY)
+    });
+  }
 
-    if (url.pathname === "/version" && request.method === "GET") {
-      return json({ version: VERSION });
-    }
+  if (url.pathname === "/version" && request.method === "GET") {
+    return json({ version: VERSION });
+  }
 
-    if (url.pathname === "/oauth/soundcloud/exchange") {
+  const keyCheck = requireAppAPIKey(request, env);
+  if (!keyCheck.ok) {
+    return json({ error: "unauthorized_api_key", message: "Missing or invalid API key." }, 401);
+  }
+
+  if (url.pathname === "/oauth/soundcloud/exchange") {
       return handleExchange(request, env);
     }
 
@@ -528,113 +538,6 @@ async function fetchLastFMJSON(cfg: LastFMConfig, params: Record<string, string>
   return { ok: true, value };
 }
 
-function normalizeRecentTracks(value: unknown): Array<{ artist: string; name: string }> {
-  const tracks = readArray(readRecord(readRecord(value).recenttracks).track);
-  return tracks.flatMap((raw) => {
-    const record = readRecord(raw);
-    const name = readString(record.name);
-    const artist = readString(readRecord(record.artist)["#text"]);
-    if (!artist || !name) {
-      return [];
-    }
-    return [{ artist, name }];
-  });
-}
-
-function normalizeTopArtists(value: unknown): Array<{ name: string; playcount: number }> {
-  const artists = readArray(readRecord(readRecord(value).topartists).artist);
-  return artists.flatMap((raw) => {
-    const record = readRecord(raw);
-    const name = readString(record.name);
-    const playcount = readNumber(record.playcount);
-    if (!name) {
-      return [];
-    }
-    return [{ name, playcount }];
-  });
-}
-
-type Result<T> = { ok: true; value: T } | { ok: false; error: string };
-
-interface BrokerConfig {
-  clientID: string;
-  clientSecret: string;
-  tokenURL: string;
-}
-
-interface LastFMConfig {
-  apiKey: string;
-  apiSecret: string;
-  apiURL: string;
-}
-
-function loadConfig(env: Env): Result<BrokerConfig> {
-  if (!env.SOUNDCLOUD_CLIENT_ID) {
-    return { ok: false, error: "missing_soundcloud_client_id" };
-  }
-
-  if (!env.SOUNDCLOUD_CLIENT_SECRET) {
-    return { ok: false, error: "missing_soundcloud_client_secret" };
-  }
-
-  const tokenURL = env.SOUNDCLOUD_TOKEN_URL || "https://secure.soundcloud.com/oauth/token";
-  if (!isValidHTTPURL(tokenURL)) {
-    return { ok: false, error: "invalid_soundcloud_token_url" };
-  }
-
-  return {
-    ok: true,
-    value: {
-      clientID: env.SOUNDCLOUD_CLIENT_ID,
-      clientSecret: env.SOUNDCLOUD_CLIENT_SECRET,
-      tokenURL
-    }
-  };
-}
-
-function loadLastFMConfig(env: Env): Result<LastFMConfig> {
-  if (!env.LASTFM_API_KEY) {
-    return { ok: false, error: "missing_lastfm_api_key" };
-  }
-
-  if (!env.LASTFM_API_SECRET) {
-    return { ok: false, error: "missing_lastfm_api_secret" };
-  }
-
-  const apiURL = env.LASTFM_API_URL || "https://ws.audioscrobbler.com/2.0/";
-  if (!isValidHTTPURL(apiURL)) {
-    return { ok: false, error: "invalid_lastfm_api_url" };
-  }
-
-  return {
-    ok: true,
-    value: {
-      apiKey: env.LASTFM_API_KEY,
-      apiSecret: env.LASTFM_API_SECRET,
-      apiURL
-    }
-  };
-}
-
-function isValidHTTPURL(raw: string): boolean {
-  try {
-    const url = new URL(raw);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function signLastFM(params: Record<string, string>, apiSecret: string): string {
-  const payload = Object.entries(params)
-    .filter(([key]) => key !== "format" && key !== "callback" && key !== "api_sig")
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}${value}`)
-    .join("") + apiSecret;
-
-  return md5(payload);
-}
-
 async function parseJSON<T>(request: Request): Promise<Result<T>> {
   const contentLength = Number(request.headers.get("Content-Length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
@@ -705,61 +608,6 @@ function json(payload: unknown, status = 200, headers: Record<string, string> = 
   });
 }
 
-function clampLimit(value: number | undefined, fallback: number, max: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.min(max, Math.max(1, Math.floor(value)));
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
-
-function readArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (value && typeof value === "object") {
-    return [value];
-  }
-  return [];
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function isLastFMError(value: unknown): boolean {
-  const record = readRecord(value);
-  return typeof record.error === "number"
-    || (typeof record.message === "string" && typeof record.error !== "undefined");
-}
-
-interface RateLimitConfig {
-  maxRequests: number;
-  windowSeconds: number;
-}
-
-type RateLimitResult =
-  | { ok: true }
-  | { ok: false; retryAfterSeconds: number };
-
 async function checkRateLimit(request: Request, env: Env, url: URL): Promise<RateLimitResult> {
   if (request.method === "GET" && (url.pathname === "/healthz" || url.pathname === "/version")) {
     return { ok: true };
@@ -770,72 +618,43 @@ async function checkRateLimit(request: Request, env: Env, url: URL): Promise<Rat
     return { ok: true };
   }
 
-  const key = await rateLimitKey(request);
-  const now = Date.now();
-  const windowMs = cfg.windowSeconds * 1_000;
-  const existing = rateLimitBuckets.get(key);
-
-  if (!existing || existing.resetAt <= now) {
-    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
-    cleanupRateLimitBuckets(now);
+  // KV not bound (local dev / smoke): rely on the API-key gate. In-memory
+  // counters are per-isolate on Cloudflare and therefore unreliable.
+  if (!env.RATE_LIMIT) {
     return { ok: true };
   }
 
-  if (existing.count >= cfg.maxRequests) {
-    return {
-      ok: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1_000))
-    };
+  const fingerprint = await rateLimitKey(request);
+  const nowMs = Date.now();
+  const windowSeconds = cfg.windowSeconds;
+  const windowIndex = Math.floor(nowMs / (windowSeconds * 1_000));
+  const kvKey = `rl:${fingerprint}:${windowIndex}`;
+
+  const raw = await env.RATE_LIMIT.get(kvKey);
+  const count = raw ? Number(raw) : 0;
+  if (Number.isFinite(count) && count >= cfg.maxRequests) {
+    const elapsedInWindow = Math.floor(nowMs / 1_000) % windowSeconds;
+    const retryAfterSeconds = Math.max(1, windowSeconds - elapsedInWindow);
+    return { ok: false, retryAfterSeconds };
   }
 
-  existing.count += 1;
+  // Best-effort read-modify-write; KV is eventually consistent so concurrent
+  // requests within the same window may undercount. Acceptable as abuse protection.
+  await env.RATE_LIMIT.put(kvKey, String(count + 1), {
+    expirationTtl: Math.max(60, windowSeconds)
+  });
   return { ok: true };
-}
-
-function loadRateLimitConfig(env: Env): RateLimitConfig {
-  return {
-    maxRequests: parsePositiveInt(env.RATE_LIMIT_PER_MINUTE, 90),
-    windowSeconds: parsePositiveInt(env.RATE_LIMIT_WINDOW_SECONDS, 60)
-  };
-}
-
-function parsePositiveInt(raw: string | undefined, fallback: number): number {
-  if (!raw) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-async function rateLimitKey(request: Request): Promise<string> {
-  const fingerprint = [
-    request.headers.get("CF-Connecting-IP") || "unknown-ip",
-    request.headers.get("User-Agent") || "unknown-agent"
-  ].join("|");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
-  return [...new Uint8Array(digest)]
-    .slice(0, 12)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function cleanupRateLimitBuckets(now: number): void {
-  if (rateLimitBuckets.size < 1_000) {
-    return;
-  }
-
-  for (const [key, bucket] of rateLimitBuckets) {
-    if (bucket.resetAt <= now) {
-      rateLimitBuckets.delete(key);
-    }
-  }
 }
 
 function withCORS(env: Env, response: Response): Response {
   const headers = new Headers(response.headers);
-  headers.set("Access-Control-Allow-Origin", env.ALLOWED_ORIGIN || "*");
-  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  const allowedOrigin = env.ALLOWED_ORIGIN;
+  // Only emit ACAO when an explicit origin is configured. The iOS app is not a
+  // browser and does not rely on CORS, so the secure default is to deny browsers.
+  if (allowedOrigin) {
+    headers.set("Access-Control-Allow-Origin", allowedOrigin);
+  }
+  headers.set("Access-Control-Allow-Headers", `Content-Type, Authorization, ${APP_API_KEY_HEADER}`);
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
   return new Response(response.body, {

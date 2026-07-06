@@ -6,7 +6,7 @@
   "workers_dev": true,
   "vars": {
     "SOUNDCLOUD_TOKEN_URL": "https://secure.soundcloud.com/oauth/token",
-    "ALLOWED_ORIGIN": "*",
+    "ALLOWED_ORIGIN": "",
     "RATE_LIMIT_PER_MINUTE": "90",
     "RATE_LIMIT_WINDOW_SECONDS": "60"
   },

@@ -28,6 +28,7 @@ type config struct {
 	LastFMAPISecret    string
 	LastFMAPIURL       string
 	AllowedOrigin      string
+	AppAPIKey          string
 	RequestTimeout     time.Duration
 }
 
@@ -350,6 +351,7 @@ func loadConfig() (config, error) {
 		LastFMAPISecret:    envOrDefault("LASTFM_API_SECRET", ""),
 		LastFMAPIURL:       envOrDefault("LASTFM_API_URL", "https://ws.audioscrobbler.com/2.0/"),
 		AllowedOrigin:      envOrDefault("ALLOWED_ORIGIN", "*"),
+		AppAPIKey:          os.Getenv("APP_API_KEY"),
 		RequestTimeout:     15 * time.Second,
 	}
 
@@ -628,10 +630,12 @@ func intValue(value any) int {
 	}
 }
 
+const appAPIKeyHeader = "X-API-Key"
+
 func withCORS(cfg config, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", cfg.AllowedOrigin)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+appAPIKeyHeader)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
 		if r.Method == http.MethodOptions {
@@ -639,8 +643,22 @@ func withCORS(cfg config, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		if !checkAppAPIKey(cfg, r) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized_api_key"})
+			return
+		}
+
 		next(w, r)
 	}
+}
+
+// checkAppAPIKey enforces the shared X-API-Key when APP_API_KEY is configured.
+// When unset (local dev / smoke), the gate is disabled.
+func checkAppAPIKey(cfg config, r *http.Request) bool {
+	if cfg.AppAPIKey == "" {
+		return true
+	}
+	return r.Header.Get(appAPIKeyHeader) == cfg.AppAPIKey
 }
 
 func writeJSON(w http.ResponseWriter, code int, payload any) {

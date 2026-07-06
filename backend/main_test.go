@@ -446,4 +446,75 @@ func TestCORSPreflightReturnsNoContent(t *testing.T) {
 	if rr.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
 		t.Fatalf("missing/invalid CORS header: %q", rr.Header().Get("Access-Control-Allow-Origin"))
 	}
+	if !strings.Contains(rr.Header().Get("Access-Control-Allow-Headers"), "X-API-Key") {
+		t.Fatalf("CORS allowed headers must include X-API-Key: %q", rr.Header().Get("Access-Control-Allow-Headers"))
+	}
+}
+
+func TestAPIKeyGateRejectsMissingHeader(t *testing.T) {
+	cfg := config{
+		SoundCloudClientID: "id",
+		SoundCloudSecret:   "secret",
+		SoundCloudTokenURL: "https://example.com/oauth/token",
+		AllowedOrigin:      "*",
+		AppAPIKey:          "secret-key",
+		RequestTimeout:     2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/soundcloud/exchange", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if payload["error"] != "unauthorized_api_key" {
+		t.Fatalf("unexpected error: %+v", payload)
+	}
+}
+
+func TestAPIKeyGateAllowsCorrectHeader(t *testing.T) {
+	cfg := config{
+		SoundCloudClientID: "id",
+		SoundCloudSecret:   "secret",
+		SoundCloudTokenURL: "https://example.com/oauth/token",
+		AllowedOrigin:      "*",
+		AppAPIKey:          "secret-key",
+		RequestTimeout:     2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/soundcloud/exchange", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "secret-key")
+	rr := httptest.NewRecorder()
+	newMux(cfg).ServeHTTP(rr, req)
+
+	// Gate passes; handler proceeds and reports missing fields (400), not 401.
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 after passing gate, got %d", rr.Code)
+	}
+}
+
+func TestAPIKeyGateDisabledWhenUnset(t *testing.T) {
+	cfg := config{
+		SoundCloudClientID: "id",
+		SoundCloudSecret:   "secret",
+		SoundCloudTokenURL: "https://example.com/oauth/token",
+		AllowedOrigin:      "*",
+		RequestTimeout:     2 * time.Second,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/soundcloud/exchange", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	newMux(cfg).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 (gate disabled), got %d", rr.Code)
+	}
 }
