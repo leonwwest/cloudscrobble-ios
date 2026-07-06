@@ -371,10 +371,10 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("CloudScrobble einrichten")
+                        Text("Set up CloudScrobble")
                             .font(.system(.title2, design: .rounded).weight(.black))
                             .foregroundStyle(CloudTheme.ink)
-                        Text("Wähle zuerst, wie du SoundCloud nutzen willst. Last.fm kannst du direkt danach für Scrobbles verbinden.")
+                        Text("Choose how you want to use SoundCloud first. You can connect Last.fm for scrobbles right after.")
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
                             .foregroundStyle(CloudTheme.muted)
                             .lineSpacing(2)
@@ -382,7 +382,7 @@ struct ContentView: View {
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Verbindungen")
+                        Text("Connections")
                             .font(.system(.headline, design: .rounded).weight(.bold))
                             .foregroundStyle(CloudTheme.ink)
                         connectionActions
@@ -391,16 +391,16 @@ struct ContentView: View {
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        SettingsInfoRow(title: "Feed", value: "Du kannst Tracks ausblenden und Artists boosten oder reduzieren.")
-                        SettingsInfoRow(title: "Scrobbles", value: "Der Player bleibt ruhig; Details findest du in Diagnose.")
-                        SettingsInfoRow(title: "Offline", value: "Scrobbles bleiben queued und werden später gesendet.")
+                        SettingsInfoRow(title: "Feed", value: "You can hide tracks and boost or reduce artists.")
+                        SettingsInfoRow(title: "Scrobbles", value: "The player stays quiet; see Diagnostics for details.")
+                        SettingsInfoRow(title: "Offline", value: "Scrobbles stay queued and are sent later.")
                     }
                     .cloudCard()
 
                     Button {
                         showOnboardingSheet = false
                     } label: {
-                        Label("Loslegen", systemImage: "checkmark.circle.fill")
+                        Label("Get started", systemImage: "checkmark.circle.fill")
                     }
                     .buttonStyle(PrimaryPillButtonStyle())
                 }
@@ -431,10 +431,10 @@ struct ContentView: View {
     private var lastFMSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Last.fm verbinden")
+                Text("Connect Last.fm")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(CloudTheme.ink)
-                Text("CloudScrobble nutzt Last.fm für Now Playing und Scrobbles. Playback funktioniert auch ohne Last.fm.")
+                Text("CloudScrobble uses Last.fm for Now Playing and scrobbles. Playback works without Last.fm too.")
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
 
@@ -472,6 +472,7 @@ struct ContentView: View {
                     Task {
                         await session.connectLastFM(username: lastFMUsername, password: lastFMPassword)
                         if session.lastFMConnected {
+                            lastFMPassword = ""
                             showLastFMSheet = false
                         }
                     }
@@ -728,11 +729,11 @@ private struct SettingsHintText: View {
 private struct LastFMSecurityNote: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label("Was gespeichert wird", systemImage: "lock.shield.fill")
+            Label("What is stored", systemImage: "lock.shield.fill")
                 .font(.system(.caption, design: .rounded).weight(.black))
                 .foregroundStyle(CloudTheme.ink)
 
-            Text("Dein Passwort wird nur an den Token-Broker geschickt, um bei Last.fm einen Session-Key zu holen. Die App speichert danach nur diesen Session-Key im Keychain.")
+            Text("Your password is only sent to the token broker to obtain a Last.fm session key. The app then stores only that session key in the Keychain.")
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.muted)
                 .lineSpacing(2)

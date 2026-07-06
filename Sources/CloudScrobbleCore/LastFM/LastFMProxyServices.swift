@@ -8,12 +8,14 @@ public actor LastFMProxyAuthService: LastFMAuthenticating {
     private let baseURL: URL
     private let keychain: KeychainStore
     private let httpClient: HTTPClient
+    private let appAPIKey: String?
     private var inMemorySession: LastFMSession?
 
-    public init(baseURL: URL, keychain: KeychainStore, httpClient: HTTPClient = HTTPClient()) {
+    public init(baseURL: URL, keychain: KeychainStore, httpClient: HTTPClient = HTTPClient(), appAPIKey: String? = nil) {
         self.baseURL = baseURL
         self.keychain = keychain
         self.httpClient = httpClient
+        self.appAPIKey = appAPIKey
     }
 
     public func authenticate(username: String, password: String) async throws -> LastFMSession {
@@ -59,6 +61,7 @@ public actor LastFMProxyAuthService: LastFMAuthenticating {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        BrokerAuth.apply(appAPIKey, to: &request)
         request.httpBody = try JSONEncoder().encode(body)
 
         let data: Data
@@ -78,14 +81,11 @@ public actor LastFMProxyAuthService: LastFMAuthenticating {
 }
 
 public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
-    private enum Storage {
-        static let pendingQueueAccount = "lastfm.pending.scrobbles"
-    }
-
     private let baseURL: URL
     private let authService: LastFMAuthenticating
-    private let keychain: KeychainStore
     private let httpClient: HTTPClient
+    private let appAPIKey: String?
+    private let queueStore: ScrobbleQueueStoreing
     private let maxQueueSize: Int
 
     private var inMemoryQueue: [PendingScrobble]?
@@ -93,14 +93,16 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
     public init(
         baseURL: URL,
         authService: LastFMAuthenticating,
-        keychain: KeychainStore,
+        queueStore: ScrobbleQueueStoreing,
         httpClient: HTTPClient = HTTPClient(),
+        appAPIKey: String? = nil,
         maxQueueSize: Int = 1_000
     ) {
         self.baseURL = baseURL
         self.authService = authService
-        self.keychain = keychain
+        self.queueStore = queueStore
         self.httpClient = httpClient
+        self.appAPIKey = appAPIKey
         self.maxQueueSize = maxQueueSize
     }
 
@@ -184,6 +186,7 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        BrokerAuth.apply(appAPIKey, to: &request)
         request.httpBody = try JSONEncoder().encode(body)
 
         let data: Data
@@ -204,12 +207,7 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
             return inMemoryQueue
         }
 
-        guard let data = try keychain.load(account: Storage.pendingQueueAccount) else {
-            inMemoryQueue = []
-            return []
-        }
-
-        let decoded = (try? JSONDecoder().decode([PendingScrobble].self, from: data)) ?? []
+        let decoded = try queueStore.load()
         inMemoryQueue = decoded
         return decoded
     }
@@ -218,12 +216,11 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
         inMemoryQueue = queue
 
         if queue.isEmpty {
-            keychain.delete(account: Storage.pendingQueueAccount)
+            try queueStore.clear()
             return
         }
 
-        let data = try JSONEncoder().encode(queue)
-        try keychain.save(data: data, account: Storage.pendingQueueAccount)
+        try queueStore.save(queue)
     }
 }
 
@@ -231,15 +228,18 @@ public actor LastFMProxyTasteService: LastFMTasteFetching {
     private let baseURL: URL
     private let authService: LastFMAuthenticating
     private let httpClient: HTTPClient
+    private let appAPIKey: String?
 
     public init(
         baseURL: URL,
         authService: LastFMAuthenticating,
-        httpClient: HTTPClient = HTTPClient()
+        httpClient: HTTPClient = HTTPClient(),
+        appAPIKey: String? = nil
     ) {
         self.baseURL = baseURL
         self.authService = authService
         self.httpClient = httpClient
+        self.appAPIKey = appAPIKey
     }
 
     public func tasteProfile(limit: Int = 50) async throws -> LastFMTasteProfile {
@@ -265,6 +265,7 @@ public actor LastFMProxyTasteService: LastFMTasteFetching {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        BrokerAuth.apply(appAPIKey, to: &request)
         request.httpBody = try JSONEncoder().encode(body)
 
         let data: Data

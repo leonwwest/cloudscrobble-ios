@@ -14,27 +14,8 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>CloudScrobble connects to the local token broker while running a development build.</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
-	<key>SOUNDCLOUD_CLIENT_ID</key>
-	<string>$(SOUNDCLOUD_CLIENT_ID)</string>
-	<key>SOUNDCLOUD_REDIRECT_URI</key>
-	<string>$(SOUNDCLOUD_REDIRECT_URI)</string>
-	<key>SOUNDCLOUD_TOKEN_BROKER_BASE_URL</key>
-	<string>$(SOUNDCLOUD_TOKEN_BROKER_BASE_URL)</string>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -50,5 +31,26 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CS_APP_API_KEY</key>
+	<string>$(CS_APP_API_KEY)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CloudScrobble connects to the local token broker while running a development build.</string>
+	<key>SOUNDCLOUD_CLIENT_ID</key>
+	<string>$(SOUNDCLOUD_CLIENT_ID)</string>
+	<key>SOUNDCLOUD_REDIRECT_URI</key>
+	<string>$(SOUNDCLOUD_REDIRECT_URI)</string>
+	<key>SOUNDCLOUD_TOKEN_BROKER_BASE_URL</key>
+	<string>$(SOUNDCLOUD_TOKEN_BROKER_BASE_URL)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
 </dict>
 </plist>

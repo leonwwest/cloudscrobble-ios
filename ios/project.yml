@@ -18,6 +18,8 @@ targets:
       - path: ../Sources/CloudScrobbleApp
       - path: CloudScrobbleiOS/Assets.xcassets
         buildPhase: resources
+      - path: CloudScrobbleiOS/Localizable.xcstrings
+        buildPhase: resources
     info:
       path: CloudScrobbleiOS/Info.plist
       properties:
@@ -27,6 +29,7 @@ targets:
         SOUNDCLOUD_CLIENT_ID: $(SOUNDCLOUD_CLIENT_ID)
         SOUNDCLOUD_REDIRECT_URI: $(SOUNDCLOUD_REDIRECT_URI)
         SOUNDCLOUD_TOKEN_BROKER_BASE_URL: $(SOUNDCLOUD_TOKEN_BROKER_BASE_URL)
+        CS_APP_API_KEY: $(CS_APP_API_KEY)
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio

@@ -68,6 +68,9 @@ final class AppSessionViewModel: ObservableObject {
         self.config = config
 
         let keychain = KeychainStore(service: "com.cloudscrobble.private")
+        let scrobbleQueueStore = UserDefaultsScrobbleQueueStore()
+        // One-time migration of any legacy Keychain-backed queue to UserDefaults.
+        scrobbleQueueStore.migrate(from: keychain, account: "lastfm.pending.scrobbles")
         let mockSoundCloudAPIClient = MockSoundCloudAPIClient()
         self.mockSoundCloudAPIClient = mockSoundCloudAPIClient
         self.mockPlaybackResolver = PlaybackResolver(api: mockSoundCloudAPIClient)
@@ -78,7 +81,8 @@ final class AppSessionViewModel: ObservableObject {
                     clientID: config.soundCloudClientID,
                     tokenBrokerBaseURL: config.tokenBrokerBaseURL
                 ),
-                keychain: keychain
+                keychain: keychain,
+                appAPIKey: config.appAPIKey
             )
             let tokenProvider = SoundCloudTokenProvider(authService: soundCloudAuthService)
             let soundCloudAPIClient = SoundCloudAPIClient(tokenProvider: tokenProvider)
@@ -86,16 +90,19 @@ final class AppSessionViewModel: ObservableObject {
 
             let lastFMAuthService = LastFMProxyAuthService(
                 baseURL: config.tokenBrokerBaseURL,
-                keychain: keychain
+                keychain: keychain,
+                appAPIKey: config.appAPIKey
             )
             let lastFMScrobbleService = LastFMProxyScrobbleService(
                 baseURL: config.tokenBrokerBaseURL,
                 authService: lastFMAuthService,
-                keychain: keychain
+                queueStore: scrobbleQueueStore,
+                appAPIKey: config.appAPIKey
             )
             let lastFMTasteService = LastFMProxyTasteService(
                 baseURL: config.tokenBrokerBaseURL,
-                authService: lastFMAuthService
+                authService: lastFMAuthService,
+                appAPIKey: config.appAPIKey
             )
 
             self.soundCloudAuthService = soundCloudAuthService
@@ -684,7 +691,7 @@ final class AppSessionViewModel: ObservableObject {
     private func localBrokerUnavailableOnCurrentNetworkMessage() -> String? {
         guard let config,
               networkStatusLabel == "Cellular",
-              Self.isLocalNetworkURL(config.tokenBrokerBaseURL) else {
+              NetworkURLPolicy.isLocalNetworkURL(config.tokenBrokerBaseURL) else {
             return nil
         }
 
@@ -703,27 +710,6 @@ final class AppSessionViewModel: ObservableObject {
             NSURLErrorNotConnectedToInternet,
             NSURLErrorTimedOut
         ].contains(nsError.code)
-    }
-
-    private nonisolated static func isLocalNetworkURL(_ url: URL) -> Bool {
-        guard let host = url.host(percentEncoded: false)?.lowercased() else {
-            return false
-        }
-
-        if host == "localhost" || host.hasSuffix(".local") || host == "::1" {
-            return true
-        }
-
-        if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
-            return true
-        }
-
-        let parts = host.split(separator: ".").compactMap { Int($0) }
-        if parts.count == 4, parts[0] == 172, (16...31).contains(parts[1]) {
-            return true
-        }
-
-        return host.hasPrefix("fc") || host.hasPrefix("fd") || host.hasPrefix("fe80:")
     }
 
     private func boundedPlaybackQueue(

@@ -5,6 +5,7 @@ struct AppConfig {
     let soundCloudClientID: String
     let soundCloudRedirectURI: String
     let tokenBrokerBaseURL: URL
+    let appAPIKey: String?
 
     private static let deployedTokenBrokerBaseURL = URL(string: "https://broker.example")!
 
@@ -39,11 +40,13 @@ struct AppConfig {
         }
 
         let tokenBrokerBaseURL = validatedTokenBrokerURL(from: values)
+        let appAPIKey = stringValue(for: "CS_APP_API_KEY", in: values)
 
         return AppConfig(
             soundCloudClientID: rawSoundCloudClientID,
             soundCloudRedirectURI: rawRedirectURI,
-            tokenBrokerBaseURL: tokenBrokerBaseURL
+            tokenBrokerBaseURL: tokenBrokerBaseURL,
+            appAPIKey: appAPIKey
         )
     }
 
@@ -60,28 +63,7 @@ struct AppConfig {
     }
 
     private static func publicTokenBrokerURL(for configuredURL: URL) -> URL {
-        isLocalNetworkURL(configuredURL) ? deployedTokenBrokerBaseURL : configuredURL
-    }
-
-    private static func isLocalNetworkURL(_ url: URL) -> Bool {
-        guard let host = url.host(percentEncoded: false)?.lowercased() else {
-            return false
-        }
-
-        if host == "localhost" || host.hasSuffix(".local") || host == "::1" {
-            return true
-        }
-
-        if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
-            return true
-        }
-
-        let parts = host.split(separator: ".").compactMap { Int($0) }
-        if parts.count == 4, parts[0] == 172, (16...31).contains(parts[1]) {
-            return true
-        }
-
-        return host.hasPrefix("fc") || host.hasPrefix("fd") || host.hasPrefix("fe80:")
+        NetworkURLPolicy.isLocalNetworkURL(configuredURL) ? deployedTokenBrokerBaseURL : configuredURL
     }
 
     private static func stringValue(for key: String, in values: [String: Any]) -> String? {

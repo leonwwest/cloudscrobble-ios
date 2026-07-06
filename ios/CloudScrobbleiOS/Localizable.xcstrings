@@ -1,0 +1,94 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Set up CloudScrobble" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CloudScrobble einrichten"
+          }
+        }
+      }
+    },
+    "Choose how you want to use SoundCloud first. You can connect Last.fm for scrobbles right after." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle zuerst, wie du SoundCloud nutzen willst. Last.fm kannst du direkt danach für Scrobbles verbinden."
+          }
+        }
+      }
+    },
+    "Connections" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindungen"
+          }
+        }
+      }
+    },
+    "Get started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loslegen"
+          }
+        }
+      }
+    },
+    "Connect Last.fm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last.fm verbinden"
+          }
+        }
+      }
+    },
+    "CloudScrobble uses Last.fm for Now Playing and scrobbles. Playback works without Last.fm too." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CloudScrobble nutzt Last.fm für Now Playing und Scrobbles. Playback funktioniert auch ohne Last.fm."
+          }
+        }
+      }
+    },
+    "What is stored" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Was gespeichert wird"
+          }
+        }
+      }
+    },
+    "Your password is only sent to the token broker to obtain a Last.fm session key. The app then stores only that session key in the Keychain." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Passwort wird nur an den Token-Broker geschickt, um bei Last.fm einen Session-Key zu holen. Die App speichert danach nur diesen Session-Key im Keychain."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

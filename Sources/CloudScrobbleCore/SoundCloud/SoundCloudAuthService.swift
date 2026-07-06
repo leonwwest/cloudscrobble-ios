@@ -27,13 +27,15 @@ public actor SoundCloudAuthService: SoundCloudAuthProviding {
     private let config: SoundCloudAuthConfiguration
     private let keychain: KeychainStore
     private let httpClient: HTTPClient
+    private let appAPIKey: String?
 
     private var inMemoryToken: SoundCloudToken?
 
-    public init(config: SoundCloudAuthConfiguration, keychain: KeychainStore, httpClient: HTTPClient = HTTPClient()) {
+    public init(config: SoundCloudAuthConfiguration, keychain: KeychainStore, httpClient: HTTPClient = HTTPClient(), appAPIKey: String? = nil) {
         self.config = config
         self.keychain = keychain
         self.httpClient = httpClient
+        self.appAPIKey = appAPIKey
     }
 
     public func makeAuthorizationURL(codeChallenge: String, state: String, redirectURI: String) async throws -> URL {
@@ -117,6 +119,7 @@ public actor SoundCloudAuthService: SoundCloudAuthProviding {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        BrokerAuth.apply(appAPIKey, to: &request)
         request.httpBody = try JSONEncoder().encode(body)
 
         let response = try await httpClient.send(request)
