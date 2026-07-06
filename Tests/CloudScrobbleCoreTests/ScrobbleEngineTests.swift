@@ -1,6 +1,7 @@
 import XCTest
 @testable import CloudScrobbleCore
 
+@MainActor
 final class ScrobbleEngineTests: XCTestCase {
     func testSendsNowPlayingImmediately() {
         let engine = ScrobbleEngine()

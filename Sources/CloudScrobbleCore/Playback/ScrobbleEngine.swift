@@ -5,6 +5,7 @@ public enum ScrobbleEngineEvent: Equatable, Sendable {
     case sendScrobble(trackURN: String, meta: LastFMTrackMeta, timestamp: Int)
 }
 
+@MainActor
 public final class ScrobbleEngine {
     public private(set) var state = ScrobbleState()
 
