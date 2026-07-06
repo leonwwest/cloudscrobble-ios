@@ -1,14 +1,10 @@
 import Foundation
 
 public actor LastFMScrobbleService: LastFMScrobbleSending {
-    private enum Storage {
-        static let pendingQueueAccount = "lastfm.pending.scrobbles"
-    }
-
     private let config: LastFMConfiguration
     private let authService: LastFMAuthenticating
     private let httpClient: HTTPClient
-    private let keychain: KeychainStore
+    private let queueStore: ScrobbleQueueStoreing
     private let maxQueueSize: Int
 
     private var inMemoryQueue: [PendingScrobble]?
@@ -16,13 +12,13 @@ public actor LastFMScrobbleService: LastFMScrobbleSending {
     public init(
         config: LastFMConfiguration,
         authService: LastFMAuthenticating,
-        keychain: KeychainStore,
+        queueStore: ScrobbleQueueStoreing,
         httpClient: HTTPClient = HTTPClient(),
         maxQueueSize: Int = 1_000
     ) {
         self.config = config
         self.authService = authService
-        self.keychain = keychain
+        self.queueStore = queueStore
         self.httpClient = httpClient
         self.maxQueueSize = maxQueueSize
     }
@@ -134,12 +130,7 @@ public actor LastFMScrobbleService: LastFMScrobbleSending {
             return inMemoryQueue
         }
 
-        guard let data = try keychain.load(account: Storage.pendingQueueAccount) else {
-            inMemoryQueue = []
-            return []
-        }
-
-        let decoded = (try? JSONDecoder().decode([PendingScrobble].self, from: data)) ?? []
+        let decoded = try queueStore.load()
         inMemoryQueue = decoded
         return decoded
     }
@@ -148,12 +139,11 @@ public actor LastFMScrobbleService: LastFMScrobbleSending {
         inMemoryQueue = queue
 
         if queue.isEmpty {
-            keychain.delete(account: Storage.pendingQueueAccount)
+            try queueStore.clear()
             return
         }
 
-        let data = try JSONEncoder().encode(queue)
-        try keychain.save(data: data, account: Storage.pendingQueueAccount)
+        try queueStore.save(queue)
     }
 
     static func makeBatchScrobbleParameters(

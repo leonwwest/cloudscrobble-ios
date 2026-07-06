@@ -20,7 +20,11 @@ final class LastFMLiveIntegrationTests: XCTestCase {
         let keychain = KeychainStore(service: "com.cloudscrobble.tests.lastfm.live.\(UUID().uuidString)")
         let config = LastFMConfiguration(apiKey: apiKey, apiSecret: apiSecret)
         let authService = LastFMAuthService(config: config, keychain: keychain)
-        let scrobbleService = LastFMScrobbleService(config: config, authService: authService, keychain: keychain)
+        let scrobbleService = LastFMScrobbleService(
+            config: config,
+            authService: authService,
+            queueStore: UserDefaultsScrobbleQueueStore(defaults: .standard, key: "cloudscrobble.tests.lastfm.live.\(UUID().uuidString)")
+        )
 
         let session = try await authService.authenticate(username: username, password: password)
         XCTAssertFalse(session.key.isEmpty)
