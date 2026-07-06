@@ -3,13 +3,20 @@ import Foundation
 public actor PlaybackResolver: PlaybackResolving {
     private let api: SoundCloudAPIClienting
     private var streamCache: [String: ResolvedPlaybackStream] = [:]
+    // LRU access order: least-recently-used at the front, most-recently-used
+    // at the tail. Replaces the previous `Dictionary.keys.first` eviction,
+    // which removed an arbitrary (hash-ordered) entry.
+    private var cacheOrder: [String] = []
+    private let maxCacheSize: Int
 
-    public init(api: SoundCloudAPIClienting) {
+    public init(api: SoundCloudAPIClienting, maxCacheSize: Int = 120) {
         self.api = api
+        self.maxCacheSize = maxCacheSize
     }
 
     public func resolvePlayableStream(for trackURN: String) async throws -> ResolvedPlaybackStream {
         if let cached = streamCache[trackURN] {
+            touchCacheOrder(trackURN)
             return cached
         }
 
@@ -50,9 +57,18 @@ public actor PlaybackResolver: PlaybackResolving {
 
     private func cache(_ stream: ResolvedPlaybackStream, for trackURN: String) -> ResolvedPlaybackStream {
         streamCache[trackURN] = stream
-        if streamCache.count > 120 {
-            streamCache.removeValue(forKey: streamCache.keys.first ?? trackURN)
+        touchCacheOrder(trackURN)
+
+        if streamCache.count > maxCacheSize, let evict = cacheOrder.first {
+            cacheOrder.removeFirst()
+            streamCache.removeValue(forKey: evict)
         }
+
         return stream
+    }
+
+    private func touchCacheOrder(_ trackURN: String) {
+        cacheOrder.removeAll { $0 == trackURN }
+        cacheOrder.append(trackURN)
     }
 }
