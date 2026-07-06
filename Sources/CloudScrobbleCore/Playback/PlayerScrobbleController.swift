@@ -24,12 +24,6 @@ public enum PlaybackRepeatMode: String, CaseIterable, Sendable {
 
 @MainActor
 public final class PlayerScrobbleController: ObservableObject {
-    private enum Storage {
-        static let savedPlaybackSnapshotKey = "cloudscrobble.savedPlaybackSnapshot.v1"
-        static let recentlyPlayedKey = "cloudscrobble.recentlyPlayed.v1"
-        static let scrobbleHistoryKey = "cloudscrobble.scrobbleHistory.v1"
-    }
-
     @Published public private(set) var phase: PlaybackPhase = .idle
     @Published public private(set) var queue: [QueueItem] = []
     @Published public private(set) var currentIndex: Int?
@@ -61,12 +55,9 @@ public final class PlayerScrobbleController: ObservableObject {
     private var currentPlayerItemID: ObjectIdentifier?
     private var playbackDispatchGeneration = UUID()
     private var nowPlayingDispatchTask: Task<Void, Never>?
-#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
-    private var nowPlayingArtworkTask: Task<Void, Never>?
-    private var nowPlayingArtworkTrackURN: String?
-    private var nowPlayingArtworkURL: URL?
-    private var nowPlayingArtwork: MPMediaItemArtwork?
-#endif
+
+    private let persistence = PlaybackPersistenceStore()
+    private let nowPlayingInfo = NowPlayingInfoCoordinator()
 
     private var lastFMScrobbler: LastFMScrobbleSending?
 
@@ -88,8 +79,8 @@ public final class PlayerScrobbleController: ObservableObject {
 
     public init(lastFMScrobbler: LastFMScrobbleSending?) {
         self.lastFMScrobbler = lastFMScrobbler
-        self.recentlyPlayed = Self.loadRecentlyPlayed()
-        self.scrobbleHistory = Self.loadScrobbleHistory()
+        self.recentlyPlayed = persistence.loadRecentlyPlayed()
+        self.scrobbleHistory = persistence.loadScrobbleHistory()
         player.actionAtItemEnd = .advance
         player.automaticallyWaitsToMinimizeStalling = true
         configureAudioSession()
@@ -98,6 +89,14 @@ public final class PlayerScrobbleController: ObservableObject {
         observePlaybackProblems()
         observeAudioSession()
         configureRemoteCommands()
+        nowPlayingInfo.refreshHandler = { [weak self] in
+            guard let self, let item = self.currentItem else { return }
+            self.nowPlayingInfo.update(
+                for: item,
+                elapsedSeconds: self.elapsedSeconds,
+                playbackRate: self.isPlaying ? 1 : 0
+            )
+        }
     }
 
     public func setLastFMScrobbler(_ scrobbler: LastFMScrobbleSending?) {
@@ -302,13 +301,13 @@ public final class PlayerScrobbleController: ObservableObject {
 
     public func clearRecentlyPlayed() {
         recentlyPlayed = []
-        UserDefaults.standard.removeObject(forKey: Storage.recentlyPlayedKey)
+        persistence.clearRecentlyPlayed()
     }
 
     public func clearScrobbleHistory() {
         scrobbleHistory = []
         skippedUnplayableCount = 0
-        UserDefaults.standard.removeObject(forKey: Storage.scrobbleHistoryKey)
+        persistence.clearScrobbleHistory()
     }
 
     public func cycleRepeatMode() {
@@ -356,15 +355,12 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func savedPlaybackSnapshot() -> SavedPlaybackSnapshot? {
-        guard let data = UserDefaults.standard.data(forKey: Storage.savedPlaybackSnapshotKey) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(SavedPlaybackSnapshot.self, from: data)
+        persistence.loadSnapshot()
     }
 
     public func clearSavedPlaybackSnapshot() {
         lastSnapshotPersistedAt = nil
-        UserDefaults.standard.removeObject(forKey: Storage.savedPlaybackSnapshotKey)
+        persistence.clearSnapshot()
     }
 
     public func restoreSavedQueue(_ items: [QueueItem], from snapshot: SavedPlaybackSnapshot) {
@@ -932,99 +928,15 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func updateNowPlayingInfo(for item: QueueItem, playbackRate: Double) {
-#if os(iOS) && canImport(MediaPlayer)
-        prepareNowPlayingArtwork(for: item)
-
-        var info: [String: Any] = [
-            MPMediaItemPropertyTitle: item.title,
-            MPMediaItemPropertyArtist: item.artistDisplay,
-            MPMediaItemPropertyPlaybackDuration: Double(max(item.durationSeconds, 1)),
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsedSeconds,
-            MPNowPlayingInfoPropertyPlaybackRate: playbackRate
-        ]
-
-#if canImport(UIKit)
-        if nowPlayingArtworkTrackURN == item.trackURN, let nowPlayingArtwork {
-            info[MPMediaItemPropertyArtwork] = nowPlayingArtwork
-        }
-#endif
-
-        if let permalinkURL = item.permalinkURL {
-            info[MPNowPlayingInfoPropertyAssetURL] = permalinkURL
-        }
-
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-#endif
+        nowPlayingInfo.update(for: item, elapsedSeconds: elapsedSeconds, playbackRate: playbackRate)
     }
 
     private func clearNowPlayingInfo() {
-#if os(iOS) && canImport(MediaPlayer)
-        clearNowPlayingArtwork()
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-#endif
+        nowPlayingInfo.clear()
     }
 
     private var isCurrentlyPlaying: Bool {
         isPlaying
-    }
-
-    private func prepareNowPlayingArtwork(for item: QueueItem) {
-#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
-        guard nowPlayingArtworkTrackURN != item.trackURN || nowPlayingArtworkURL != item.artworkURL else {
-            return
-        }
-
-        nowPlayingArtworkTask?.cancel()
-        nowPlayingArtworkTrackURN = item.trackURN
-        nowPlayingArtworkURL = item.artworkURL
-        nowPlayingArtwork = nil
-
-        guard let artworkURL = item.artworkURL else { return }
-
-        nowPlayingArtworkTask = Task { [weak self, trackURN = item.trackURN, artworkURL] in
-            do {
-                let (data, response) = try await URLSession.shared.data(from: artworkURL)
-                guard !Task.isCancelled,
-                      (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
-                      let image = UIImage(data: data) else {
-                    return
-                }
-
-                let artwork = Self.makeNowPlayingArtwork(from: image)
-                await MainActor.run { [weak self] in
-                    guard self?.nowPlayingArtworkTrackURN == trackURN,
-                          self?.nowPlayingArtworkURL == artworkURL else {
-                        return
-                    }
-
-                    self?.nowPlayingArtwork = artwork
-                    if case .playing(let current) = self?.phase, current.trackURN == trackURN {
-                        self?.updateNowPlayingInfo(for: current, playbackRate: 1)
-                    } else if case .paused(let current) = self?.phase, current.trackURN == trackURN {
-                        self?.updateNowPlayingInfo(for: current, playbackRate: 0)
-                    }
-                }
-            } catch {
-                // Artwork is cosmetic; playback should continue if loading fails.
-            }
-        }
-#endif
-    }
-
-#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
-    private nonisolated static func makeNowPlayingArtwork(from image: UIImage) -> MPMediaItemArtwork {
-        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-    }
-#endif
-
-    private func clearNowPlayingArtwork() {
-#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
-        nowPlayingArtworkTask?.cancel()
-        nowPlayingArtworkTask = nil
-        nowPlayingArtworkTrackURN = nil
-        nowPlayingArtworkURL = nil
-        nowPlayingArtwork = nil
-#endif
     }
 
     private func dispatchNowPlaying(
@@ -1176,10 +1088,7 @@ public final class PlayerScrobbleController: ObservableObject {
             isShuffleEnabled: isShuffleEnabled
         )
 
-        guard let data = try? JSONEncoder().encode(snapshot) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: Storage.savedPlaybackSnapshotKey)
+        persistence.saveSnapshot(snapshot)
         lastSnapshotPersistedAt = now
     }
 
@@ -1233,10 +1142,7 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func persistRecentlyPlayed() {
-        guard let data = try? JSONEncoder().encode(recentlyPlayed) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: Storage.recentlyPlayedKey)
+        persistence.saveRecentlyPlayed(recentlyPlayed)
     }
 
     private func recordScrobbleHistory(
@@ -1298,25 +1204,6 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func persistScrobbleHistory() {
-        guard let data = try? JSONEncoder().encode(scrobbleHistory) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: Storage.scrobbleHistoryKey)
-    }
-
-    private static func loadRecentlyPlayed() -> [SavedPlaybackTrack] {
-        guard let data = UserDefaults.standard.data(forKey: Storage.recentlyPlayedKey),
-              let decoded = try? JSONDecoder().decode([SavedPlaybackTrack].self, from: data) else {
-            return []
-        }
-        return decoded
-    }
-
-    private static func loadScrobbleHistory() -> [ScrobbleHistoryEntry] {
-        guard let data = UserDefaults.standard.data(forKey: Storage.scrobbleHistoryKey),
-              let decoded = try? JSONDecoder().decode([ScrobbleHistoryEntry].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistence.saveScrobbleHistory(scrobbleHistory)
     }
 }
