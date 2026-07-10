@@ -524,15 +524,15 @@ final class HomeViewModel: ObservableObject {
         sourceLikedPlaylistTracks = likedPlaylistTracks
         rebuildVisibleHomeAfterFeedback(persist: false)
 
-        let seedTracks = rankedFeedbackTracks(Self.uniqueTracks(
-            sourceFeedTracks
-                + sourceMyTracks
-                + sourceFollowingTracks
-                + sourceLikedTracks
-                + playlistTracks
-                + likedPlaylistTracks
-                + sourceLastFMTasteTracks
-        ))
+        var seedTrackCandidates = sourceFeedTracks
+        seedTrackCandidates += sourceMyTracks
+        seedTrackCandidates += sourceFollowingTracks
+        seedTrackCandidates += sourceLikedTracks
+        seedTrackCandidates += playlistTracks
+        seedTrackCandidates += likedPlaylistTracks
+        seedTrackCandidates += sourceLastFMTasteTracks
+        let uniqueSeedTracks = Self.uniqueTracks(seedTrackCandidates)
+        let seedTracks = rankedFeedbackTracks(uniqueSeedTracks)
         var loadedStations: [HomeMix] = []
         var discoveryTracks: [SCTrack] = []
         let username = me?.username

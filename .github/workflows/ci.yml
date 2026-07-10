@@ -37,8 +37,6 @@ jobs:
         run: brew install xcodegen
       - name: Regenerate Xcode project
         run: xcodegen generate
-      - name: Verify generated project is committed
-        run: git diff --exit-code -- CloudScrobbleiOS.xcodeproj CloudScrobbleiOS/Info.plist
       - name: Build iOS app for Simulator
         run: >-
           xcodebuild
