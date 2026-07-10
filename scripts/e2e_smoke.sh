@@ -15,6 +15,9 @@ cd "$ROOT_DIR"
 echo "==> Worker TypeScript check"
 npm --prefix "$ROOT_DIR/workers/soundcloud-token-broker" run check
 
+echo "==> Worker tests"
+npm --prefix "$ROOT_DIR/workers/soundcloud-token-broker" test
+
 if [[ "${RUN_IOS_UI_TESTS:-0}" == "1" ]]; then
   echo "==> iOS UI tests"
   (cd "$ROOT_DIR/ios" && xcodegen generate)

@@ -4,6 +4,10 @@ import {
   clampLimit,
   parsePositiveInt,
   loadRateLimitConfig,
+  loadBoolean,
+  isAppAPIKeyRequired,
+  isRateLimitFailClosed,
+  loadUpstreamTimeoutMs,
   loadConfig,
   loadLastFMConfig,
   isValidHTTPURL,
@@ -100,6 +104,22 @@ describe("loadRateLimitConfig", () => {
     expect(
       loadRateLimitConfig({ RATE_LIMIT_PER_MINUTE: "10", RATE_LIMIT_WINDOW_SECONDS: "30" } as Env)
     ).toEqual({ maxRequests: 10, windowSeconds: 30 });
+  });
+});
+
+describe("security and timeout configuration", () => {
+  it("uses fail-closed production defaults", () => {
+    expect(isAppAPIKeyRequired({} as Env)).toBe(true);
+    expect(isRateLimitFailClosed({} as Env)).toBe(true);
+    expect(loadUpstreamTimeoutMs({} as Env)).toBe(10_000);
+  });
+
+  it("supports explicit local overrides and bounds upstream timeouts", () => {
+    expect(loadBoolean("off", true)).toBe(false);
+    expect(isAppAPIKeyRequired({ REQUIRE_APP_API_KEY: "false" } as Env)).toBe(false);
+    expect(isRateLimitFailClosed({ RATE_LIMIT_FAIL_CLOSED: "0" } as Env)).toBe(false);
+    expect(loadUpstreamTimeoutMs({ UPSTREAM_TIMEOUT_MS: "100" } as Env)).toBe(1_000);
+    expect(loadUpstreamTimeoutMs({ UPSTREAM_TIMEOUT_MS: "999999" } as Env)).toBe(30_000);
   });
 });
 
@@ -216,9 +236,14 @@ describe("requireAppAPIKey", () => {
     return req;
   };
 
-  it("is disabled when APP_API_KEY is unset", () => {
-    expect(requireAppAPIKey(makeRequest("anything"), {} as Env)).toEqual({ ok: true });
-    expect(requireAppAPIKey(makeRequest(), {} as Env)).toEqual({ ok: true });
+  it("fails closed when APP_API_KEY is unset by default", () => {
+    expect(requireAppAPIKey(makeRequest("anything"), {} as Env)).toEqual({ ok: false });
+    expect(requireAppAPIKey(makeRequest(), {} as Env)).toEqual({ ok: false });
+  });
+
+  it("can be explicitly disabled for local smoke environments", () => {
+    const env = { REQUIRE_APP_API_KEY: "false" } as Env;
+    expect(requireAppAPIKey(makeRequest(), env)).toEqual({ ok: true });
   });
 
   it("rejects missing or mismatched keys", () => {

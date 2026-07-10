@@ -11,27 +11,29 @@ final class CloudScrobbleiOSUITests: XCTestCase {
         app.launchArguments = ["-cloudscrobble-show-onboarding"]
         app.launch()
 
-        // Resolve expected strings through the bundle so the test is
-        // language-agnostic (English source key, German translation in catalog).
-        let onboardingTitle = Bundle.main.localizedString(forKey: "Set up CloudScrobble", value: nil, table: nil)
-        let getStartedLabel = Bundle.main.localizedString(forKey: "Get started", value: nil, table: nil)
+        XCTAssertTrue(app.staticTexts["onboarding-title"].waitForExistence(timeout: 8))
+        let fullLoginButton = app.buttons["connection-full-soundcloud-login"]
+        if !fullLoginButton.waitForExistence(timeout: 3) {
+            let disconnectButton = app.buttons["disconnect-soundcloud-button"]
+            XCTAssertTrue(disconnectButton.waitForExistence(timeout: 3))
+            disconnectButton.tap()
+        }
 
-        XCTAssertTrue(app.staticTexts[onboardingTitle].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["Full SoundCloud Login"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Public Test Mode"].exists)
-        XCTAssertTrue(app.buttons["Demo Preview"].exists)
-        XCTAssertTrue(app.buttons["Last.fm Scrobbling"].exists)
+        XCTAssertTrue(fullLoginButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["connection-public-test-mode"].exists)
+        XCTAssertTrue(app.buttons["connection-demo-preview"].exists)
+        XCTAssertTrue(app.buttons["connection-lastfm-scrobbling"].exists)
 
-        app.buttons[getStartedLabel].tap()
+        app.buttons["onboarding-get-started-button"].tap()
 
-        let settingsButton = app.buttons["Open settings"]
+        let settingsButton = app.buttons["settings-button"]
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 4))
         settingsButton.tap()
 
-        XCTAssertTrue(app.buttons["Open diagnostics"].waitForExistence(timeout: 4))
-        app.buttons["Open diagnostics"].tap()
+        XCTAssertTrue(app.buttons["open-diagnostics-button"].waitForExistence(timeout: 4))
+        app.buttons["open-diagnostics-button"].tap()
 
-        XCTAssertTrue(app.staticTexts["Last.fm Status"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["Scrobble History"].exists)
+        XCTAssertTrue(app.staticTexts["diagnostics-lastfm-status-title"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["diagnostics-scrobble-history-title"].exists)
     }
 }

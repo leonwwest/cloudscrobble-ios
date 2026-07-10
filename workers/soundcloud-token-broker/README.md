@@ -30,7 +30,13 @@ npx wrangler secret put SOUNDCLOUD_CLIENT_ID
 npx wrangler secret put SOUNDCLOUD_CLIENT_SECRET
 npx wrangler secret put LASTFM_API_KEY
 npx wrangler secret put LASTFM_API_SECRET
+npx wrangler secret put APP_API_KEY
 ```
+
+Protected routes fail closed when `APP_API_KEY` is missing. Only local smoke
+environments should opt out explicitly with `REQUIRE_APP_API_KEY=false`.
+Upstream calls have a bounded timeout controlled by `UPSTREAM_TIMEOUT_MS`
+(default 10 seconds, accepted range 1–30 seconds).
 
 Deploy:
 
@@ -47,7 +53,13 @@ curl https://broker.example/healthz
 Expected:
 
 ```json
-{"status":"ok"}
+{"status":"ok","ready":true}
 ```
 
-Current iOS builds default to the deployed Worker URL. If `SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is set to a localhost, LAN, or other private URL, the app replaces it with the deployed Worker at startup.
+The complete health payload reports upstream credential readiness, API-key
+enforcement, rate-limit binding state, failure mode, and upstream timeout
+without exposing secret values.
+
+Current iOS builds default to the deployed Worker URL. Release builds use only
+HTTPS broker URLs; Debug builds may additionally use HTTP localhost or private
+network brokers.

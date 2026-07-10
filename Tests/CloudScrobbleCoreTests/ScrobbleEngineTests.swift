@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class ScrobbleEngineTests: XCTestCase {
+    func testExcludedTrackDoesNotSendNowPlayingOrScrobble() {
+        let engine = ScrobbleEngine()
+        let track = makeQueueItem(duration: 180, scrobbleEnabled: false)
+
+        XCTAssertTrue(engine.start(track: track).isEmpty)
+        XCTAssertTrue(engine.tick(playbackTime: 90).isEmpty)
+        XCTAssertFalse(engine.state.didSendNowPlaying)
+        XCTAssertFalse(engine.state.didScrobble)
+    }
+
     func testSendsNowPlayingImmediately() {
         let engine = ScrobbleEngine()
         let events = engine.start(track: makeQueueItem(duration: 200))
@@ -93,7 +103,54 @@ final class ScrobbleEngineTests: XCTestCase {
         XCTAssertTrue(finishEvents.isEmpty)
     }
 
-    private func makeQueueItem(duration: Int) -> QueueItem {
+    func testMetadataUpdatePreservesProgressAndCanDisableScrobbling() {
+        let engine = ScrobbleEngine()
+        let original = makeQueueItem(duration: 300)
+        _ = engine.start(track: original, startedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        _ = engine.tick(playbackTime: 0)
+        _ = engine.tick(playbackTime: 2)
+        let listenedBeforeUpdate = engine.state.listenedSeconds
+
+        let corrected = QueueItem(
+            trackURN: original.trackURN,
+            title: "Correct Track",
+            artistDisplay: "Correct Artist",
+            artworkURL: original.artworkURL,
+            permalinkURL: original.permalinkURL,
+            streamURL: original.streamURL,
+            durationSeconds: original.durationSeconds,
+            lastFM: LastFMTrackMeta(artist: "Correct Artist", track: "Correct Track")
+        )
+        let events = engine.updateTrack(corrected)
+
+        XCTAssertEqual(engine.state.listenedSeconds, listenedBeforeUpdate)
+        XCTAssertEqual(
+            events,
+            [.sendNowPlaying(
+                trackURN: corrected.trackURN,
+                meta: corrected.lastFM,
+                duration: corrected.durationSeconds
+            )]
+        )
+
+        let disabled = QueueItem(
+            trackURN: corrected.trackURN,
+            title: corrected.title,
+            artistDisplay: corrected.artistDisplay,
+            artworkURL: corrected.artworkURL,
+            permalinkURL: corrected.permalinkURL,
+            streamURL: corrected.streamURL,
+            durationSeconds: corrected.durationSeconds,
+            lastFM: corrected.lastFM,
+            scrobbleEnabled: false
+        )
+        XCTAssertTrue(engine.updateTrack(disabled).isEmpty)
+        XCTAssertEqual(engine.state.scrobbleThresholdSeconds, 0)
+        XCTAssertTrue(engine.tick(playbackTime: 200).isEmpty)
+        XCTAssertFalse(engine.state.didScrobble)
+    }
+
+    private func makeQueueItem(duration: Int, scrobbleEnabled: Bool = true) -> QueueItem {
         QueueItem(
             trackURN: "soundcloud:tracks:1",
             title: "Track",
@@ -102,7 +159,8 @@ final class ScrobbleEngineTests: XCTestCase {
             permalinkURL: nil,
             streamURL: URL(string: "https://example.com/stream.m3u8")!,
             durationSeconds: duration,
-            lastFM: LastFMTrackMeta(artist: "Artist", track: "Track")
+            lastFM: LastFMTrackMeta(artist: "Artist", track: "Track"),
+            scrobbleEnabled: scrobbleEnabled
         )
     }
 }

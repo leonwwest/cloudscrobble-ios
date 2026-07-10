@@ -10,7 +10,11 @@ struct ContentView: View {
     }
 
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var session = AppSessionViewModel()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var session: AppSessionViewModel
+    @StateObject private var homeViewModel: HomeViewModel
+    @StateObject private var searchViewModel: SearchViewModel
+    @StateObject private var libraryViewModel: LibraryViewModel
     @AppStorage("cloudscrobble.didShowOnboarding.v1") private var didShowOnboarding = false
 
     @State private var lastFMUsername = ""
@@ -19,9 +23,21 @@ struct ContentView: View {
     @State private var showSettingsSheet = false
     @State private var showOnboardingSheet = false
     @State private var showDiagnosticsSheet = false
+    @State private var showResetSoundCloudConfirmation = false
+    @State private var showResetLastFMConfirmation = false
+    @State private var showResetAllConfirmation = false
+    @State private var showResetScrobblePreferencesConfirmation = false
     @State private var deckVisible = false
     @State private var pendingLastFMScrobbles = 0
     @State private var selectedTab: AppTab = .home
+
+    init() {
+        let session = AppSessionViewModel()
+        _session = StateObject(wrappedValue: session)
+        _homeViewModel = StateObject(wrappedValue: HomeViewModel(session: session))
+        _searchViewModel = StateObject(wrappedValue: SearchViewModel(session: session))
+        _libraryViewModel = StateObject(wrappedValue: LibraryViewModel(session: session))
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -36,19 +52,19 @@ struct ContentView: View {
                         .offset(y: deckVisible ? 0 : -10)
 
                     TabView(selection: $selectedTab) {
-                        HomeView(session: session, viewModel: HomeViewModel(session: session))
+                        HomeView(session: session, viewModel: homeViewModel)
                             .tabItem { Label("Start", systemImage: "house.fill") }
                             .tag(AppTab.home)
 
-                        SearchView(viewModel: SearchViewModel(session: session))
+                        SearchView(viewModel: searchViewModel)
                             .tabItem { Label("Search", systemImage: "magnifyingglass") }
                             .tag(AppTab.search)
 
                         LibraryView(
                             session: session,
-                            viewModel: LibraryViewModel(session: session),
+                            viewModel: libraryViewModel,
                             onOpenSearch: {
-                                withAnimation(.easeOut(duration: 0.18)) {
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                                     selectedTab = .search
                                 }
                             }
@@ -79,7 +95,7 @@ struct ContentView: View {
 
                 if selectedTab != .player, session.playerController.currentItem != nil {
                     MiniPlayerBar(controller: session.playerController) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.86)) {
                             selectedTab = .player
                         }
                     }
@@ -90,7 +106,6 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(isPresented: $showLastFMSheet) {
             lastFMSheet
         }
@@ -104,11 +119,10 @@ struct ContentView: View {
             await session.refreshConnectionState()
         }
         .onAppear {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.84)) {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.84)) {
                 deckVisible = true
             }
             if !didShowOnboarding || ProcessInfo.processInfo.arguments.contains("-cloudscrobble-show-onboarding") {
-                didShowOnboarding = true
                 showOnboardingSheet = true
             }
         }
@@ -135,7 +149,7 @@ struct ContentView: View {
                         .foregroundStyle(CloudTheme.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.86)
-                    Text(session.isConfigured ? "SoundCloud + Last.fm" : "Config missing")
+                    Text(LocalizedStringKey(session.isConfigured ? "SoundCloud + Last.fm" : "Config missing"))
                         .font(.system(.caption2, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                         .lineLimit(1)
@@ -155,6 +169,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(IconCircleButtonStyle())
                 .accessibilityLabel("Open settings")
+                .accessibilityIdentifier("settings-button")
             }
 
             HStack(spacing: 7) {
@@ -202,7 +217,7 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: message.isLikelyError ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
                 .foregroundStyle(message.isLikelyError ? CloudTheme.warning : CloudTheme.success)
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.ink)
                 .lineLimit(2)
@@ -282,6 +297,7 @@ struct ContentView: View {
                             Label("Open diagnostics", systemImage: "stethoscope")
                         }
                         .buttonStyle(SecondaryPillButtonStyle())
+                        .accessibilityIdentifier("open-diagnostics-button")
 
                         Button {
                             Task {
@@ -304,30 +320,28 @@ struct ContentView: View {
                         .buttonStyle(SecondaryPillButtonStyle())
 
                         Button {
-                            Task {
-                                await session.disconnectSoundCloud()
-                                await refreshDiagnostics()
-                            }
+                            showResetScrobblePreferencesConfirmation = true
+                        } label: {
+                            Label("Reset scrobble corrections", systemImage: "pencil.slash")
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+
+                        Button {
+                            showResetSoundCloudConfirmation = true
                         } label: {
                             Label("Reset SoundCloud", systemImage: "link.badge.minus")
                         }
                         .buttonStyle(SecondaryPillButtonStyle())
 
                         Button {
-                            Task {
-                                await session.disconnectLastFM()
-                                await refreshDiagnostics()
-                            }
+                            showResetLastFMConfirmation = true
                         } label: {
                             Label("Reset Last.fm", systemImage: "dot.radiowaves.left.and.right")
                         }
                         .buttonStyle(SecondaryPillButtonStyle())
 
                         Button {
-                            Task {
-                                await session.resetConnections()
-                                await refreshDiagnostics()
-                            }
+                            showResetAllConfirmation = true
                         } label: {
                             Label("Reset all connections", systemImage: "trash")
                         }
@@ -364,6 +378,65 @@ struct ContentView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .confirmationDialog(
+            "Reset SoundCloud connection?",
+            isPresented: $showResetSoundCloudConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset SoundCloud", role: .destructive) {
+                Task {
+                    await session.disconnectSoundCloud()
+                    await refreshDiagnostics()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Playback stops restoring until SoundCloud is connected again.")
+        }
+        .confirmationDialog(
+            "Reset Last.fm connection?",
+            isPresented: $showResetLastFMConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Last.fm", role: .destructive) {
+                Task {
+                    await session.disconnectLastFM()
+                    await refreshDiagnostics()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The saved Last.fm session is removed. Pending scrobbles stay on this device.")
+        }
+        .confirmationDialog(
+            "Reset all connections?",
+            isPresented: $showResetAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset all connections", role: .destructive) {
+                Task {
+                    await session.resetConnections()
+                    await refreshDiagnostics()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("SoundCloud and Last.fm must be connected again afterwards.")
+        }
+        .confirmationDialog(
+            "Reset all scrobble corrections?",
+            isPresented: $showResetScrobblePreferencesConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset scrobble corrections", role: .destructive) {
+                Task {
+                    await session.resetAllScrobblePreferences()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Saved metadata edits and track or artist exclusions will be removed. Existing Last.fm scrobbles are not changed.")
+        }
     }
 
     private var onboardingSheet: some View {
@@ -374,6 +447,7 @@ struct ContentView: View {
                         Text("Set up CloudScrobble")
                             .font(.system(.title2, design: .rounded).weight(.black))
                             .foregroundStyle(CloudTheme.ink)
+                            .accessibilityIdentifier("onboarding-title")
                         Text("Choose how you want to use SoundCloud first. You can connect Last.fm for scrobbles right after.")
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
                             .foregroundStyle(CloudTheme.muted)
@@ -382,7 +456,7 @@ struct ContentView: View {
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Connections")
+                        Label("Step 1 of 2 · SoundCloud", systemImage: session.soundCloudConnected ? "checkmark.circle.fill" : "1.circle.fill")
                             .font(.system(.headline, design: .rounded).weight(.bold))
                             .foregroundStyle(CloudTheme.ink)
                         connectionActions
@@ -391,6 +465,9 @@ struct ContentView: View {
                     .cloudCard()
 
                     VStack(alignment: .leading, spacing: 8) {
+                        Label("Step 2 of 2 · Last.fm is optional", systemImage: session.lastFMConnected ? "checkmark.circle.fill" : "2.circle")
+                            .font(.system(.headline, design: .rounded).weight(.bold))
+                            .foregroundStyle(CloudTheme.ink)
                         SettingsInfoRow(title: "Feed", value: "You can hide tracks and boost or reduce artists.")
                         SettingsInfoRow(title: "Scrobbles", value: "The player stays quiet; see Diagnostics for details.")
                         SettingsInfoRow(title: "Offline", value: "Scrobbles stay queued and are sent later.")
@@ -398,11 +475,16 @@ struct ContentView: View {
                     .cloudCard()
 
                     Button {
+                        didShowOnboarding = true
                         showOnboardingSheet = false
                     } label: {
-                        Label("Get started", systemImage: "checkmark.circle.fill")
+                            Label(
+                                LocalizedStringKey(session.soundCloudConnected ? "Get started" : "Continue without connection"),
+                            systemImage: "checkmark.circle.fill"
+                        )
                     }
                     .buttonStyle(PrimaryPillButtonStyle())
+                    .accessibilityIdentifier("onboarding-get-started-button")
                 }
                 .padding(16)
             }
@@ -562,6 +644,7 @@ private struct ConnectionSetupPanel: View {
                         Label("Disconnect SoundCloud", systemImage: "xmark.circle.fill")
                     }
                     .buttonStyle(SecondaryPillButtonStyle())
+                    .accessibilityIdentifier("disconnect-soundcloud-button")
 
                     if session.soundCloudPublicMode || session.soundCloudMockMode {
                         Button(action: onFullLogin) {
@@ -577,6 +660,7 @@ private struct ConnectionSetupPanel: View {
                     icon: "link.circle.fill",
                     badge: "Best",
                     isPrimary: true,
+                    accessibilityIdentifier: "connection-full-soundcloud-login",
                     action: onFullLogin
                 )
 
@@ -584,6 +668,7 @@ private struct ConnectionSetupPanel: View {
                     title: "Public Test Mode",
                     subtitle: "Real public search and playback. Library stays locked.",
                     icon: "globe",
+                    accessibilityIdentifier: "connection-public-test-mode",
                     action: onPublicMode
                 )
 
@@ -591,6 +676,7 @@ private struct ConnectionSetupPanel: View {
                     title: "Demo Preview",
                     subtitle: "Local sample catalog only. No SoundCloud audio.",
                     icon: "sparkles",
+                    accessibilityIdentifier: "connection-demo-preview",
                     action: onDemoMode
                 )
             }
@@ -606,6 +692,7 @@ private struct ConnectionSetupPanel: View {
                 icon: session.lastFMConnected ? "checkmark.seal.fill" : "dot.radiowaves.left.and.right",
                 badge: session.lastFMConnected ? "On" : nil,
                 isActive: session.lastFMConnected,
+                accessibilityIdentifier: "connection-lastfm-scrobbling",
                 action: onLastFM
             )
         }
@@ -650,6 +737,7 @@ private struct ConnectionModeRow: View {
     var isPrimary = false
     var isActive = false
     var isDisabled = false
+    var accessibilityIdentifier: String?
     let action: () -> Void
 
     var body: some View {
@@ -663,13 +751,13 @@ private struct ConnectionModeRow: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Text(title)
+                        Text(LocalizedStringKey(title))
                             .font(.system(.subheadline, design: .rounded).weight(.black))
                             .foregroundStyle(CloudTheme.ink)
                             .lineLimit(2)
 
                         if let badge {
-                            Text(badge)
+                            Text(LocalizedStringKey(badge))
                                 .font(.system(size: 10, weight: .black, design: .rounded))
                                 .foregroundStyle(isPrimary ? .white : CloudTheme.sky)
                                 .padding(.horizontal, 7)
@@ -678,7 +766,7 @@ private struct ConnectionModeRow: View {
                         }
                     }
 
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                         .lineLimit(3)
@@ -705,7 +793,8 @@ private struct ConnectionModeRow: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .accessibilityLabel(title)
+        .accessibilityLabel(Text(LocalizedStringKey(title)))
+        .accessibilityIdentifier(accessibilityIdentifier ?? title)
     }
 }
 
@@ -719,7 +808,7 @@ private struct SettingsHintText: View {
     }
 
     var body: some View {
-        Text(text)
+            Text(LocalizedStringKey(text))
             .font(.system(.caption, design: .rounded).weight(.semibold))
             .foregroundStyle(isWarning ? CloudTheme.warning : CloudTheme.muted)
             .lineLimit(3)
@@ -835,11 +924,11 @@ private struct SettingsInfoRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.caption2, design: .rounded).weight(.bold))
                 .foregroundStyle(CloudTheme.muted)
                 .textCase(.uppercase)
-            Text(value)
+            Text(LocalizedStringKey(value))
                 .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.ink)
                 .lineLimit(3)

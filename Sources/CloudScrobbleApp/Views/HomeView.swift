@@ -7,12 +7,12 @@ import UIKit
 struct HomeView: View {
     @ObservedObject var session: AppSessionViewModel
     @ObservedObject private var playerController: PlayerScrobbleController
-    @StateObject private var viewModel: HomeViewModel
+    @ObservedObject private var viewModel: HomeViewModel
 
     init(session: AppSessionViewModel, viewModel: HomeViewModel) {
         self.session = session
         _playerController = ObservedObject(wrappedValue: session.playerController)
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = ObservedObject(wrappedValue: viewModel)
     }
 
     private var homeRefreshID: String {
@@ -63,6 +63,16 @@ struct HomeView: View {
                     HomeMessageBanner(message: feedbackSummary)
                 }
 
+                HomePersonalizationControls(
+                    summary: viewModel.hasFeedFeedback
+                        ? viewModel.feedbackManagementSummary
+                        : "No customizations yet",
+                    hasFeedback: viewModel.hasFeedFeedback,
+                    canUndo: viewModel.canUndoFeedback,
+                    onUndo: viewModel.undoLastFeedback,
+                    onReset: viewModel.resetFeedFeedback
+                )
+
                 if viewModel.isLoading && !hasHomeContent {
                     LoadingResultSkeletonList(count: 5)
                 } else if !hasHomeContent {
@@ -81,31 +91,31 @@ struct HomeView: View {
                     }
 
                     trackShelf(
-                        title: "Mehr für dich",
+                        title: "More for you",
                         icon: "sparkles",
                         tracks: viewModel.feedTracks
                     )
 
                     mixShelf(
-                        title: "Für dich abgemischt",
+                        title: "Mixed for you",
                         icon: "waveform",
                         mixes: Array(viewModel.homeMixes.dropFirst())
                     )
 
                     mixShelf(
-                        title: "Sender",
+                        title: "Stations",
                         icon: "dot.radiowaves.left.and.right",
                         mixes: viewModel.stationMixes
                     )
 
                     trackShelf(
-                        title: "Aus deinem Feed",
+                        title: "From your feed",
                         icon: "person.2.fill",
                         tracks: viewModel.followingTracks
                     )
 
                     playlistShelf(
-                        title: "Deine Playlists",
+                        title: "Your Playlists",
                         icon: "music.note.list",
                         playlists: viewModel.homePlaylists
                     )
@@ -129,7 +139,7 @@ struct HomeView: View {
                             Task { await viewModel.loadMoreFeed() }
                         } label: {
                             Label(
-                                viewModel.isLoadingMoreFeed ? "Lade mehr..." : "Mehr Feed laden",
+                                LocalizedStringKey(viewModel.isLoadingMoreFeed ? "Loading more…" : "Load more feed"),
                                 systemImage: "arrow.down.circle"
                             )
                         }
@@ -316,7 +326,7 @@ struct HomeView: View {
     private func recentShelf(tracks: [SavedPlaybackTrack]) -> some View {
         if !tracks.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                HomeSectionHeader(title: "Kürzlich gespielt", icon: "clock.arrow.circlepath")
+                HomeSectionHeader(title: "Recently Played", icon: "clock.arrow.circlepath")
 
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 12) {
@@ -350,11 +360,19 @@ private struct HomeHeader: View {
                     .font(.system(.title2, design: .rounded).weight(.black))
                     .foregroundStyle(CloudTheme.ink)
                     .lineLimit(1)
-                Text(user.map { "Personalisiert für \($0.username)" } ?? "SoundCloud Home")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                if let user {
+                    Text("Personalized for \(user.username)")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                } else {
+                    Text("SoundCloud Home")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CloudTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
             }
 
             Spacer(minLength: 6)
@@ -381,7 +399,7 @@ private struct HomeMessageBanner: View {
         HStack(spacing: 8) {
             Image(systemName: "info.circle.fill")
                 .foregroundStyle(CloudTheme.warning)
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.warning)
                 .lineLimit(3)
@@ -396,6 +414,52 @@ private struct HomeMessageBanner: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(CloudTheme.warning.opacity(0.24), lineWidth: 1)
         )
+    }
+}
+
+private struct HomePersonalizationControls: View {
+    let summary: String
+    let hasFeedback: Bool
+    let canUndo: Bool
+    let onUndo: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(CloudTheme.sky)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(CloudTheme.sky.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Personalization")
+                    .font(.system(.caption, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
+                Text(LocalizedStringKey(summary))
+                    .font(.system(.caption2, design: .rounded).weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 4)
+
+            if canUndo {
+                Button(action: onUndo) {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Undo last personalization")
+            }
+
+            Button(action: onReset) {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .buttonStyle(IconCircleButtonStyle())
+            .disabled(!hasFeedback)
+            .accessibilityLabel("Reset personalization")
+        }
+        .cloudCard()
     }
 }
 
@@ -452,7 +516,7 @@ private struct HomeSectionHeader: View {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(CloudTheme.sky)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.headline, design: .rounded).weight(.black))
                 .foregroundStyle(CloudTheme.ink)
                 .lineLimit(1)
@@ -514,13 +578,13 @@ private struct HomeTrackCard: View {
                     }
                     Divider()
                     Button(action: onMoreLike) {
-                        Label("Mehr von diesem Artist", systemImage: "hand.thumbsup")
+                        Label("More from this artist", systemImage: "hand.thumbsup")
                     }
                     Button(action: onLessLike) {
-                        Label("Weniger davon", systemImage: "hand.thumbsdown")
+                        Label("Show less like this", systemImage: "hand.thumbsdown")
                     }
                     Button(role: .destructive, action: onHide) {
-                        Label("Nicht nochmal", systemImage: "eye.slash")
+                        Label("Don't show again", systemImage: "eye.slash")
                     }
                     if let permalinkURL = track.permalinkURL {
                         Divider()
@@ -818,7 +882,6 @@ private struct HomePlaylistTracksSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -899,7 +962,6 @@ private struct HomeMixTracksSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -939,13 +1001,13 @@ private struct HomeSheetTrackRow: View {
                 }
                 Divider()
                 Button(action: onMoreLike) {
-                    Label("Mehr von diesem Artist", systemImage: "hand.thumbsup")
+                    Label("More from this artist", systemImage: "hand.thumbsup")
                 }
                 Button(action: onLessLike) {
-                    Label("Weniger davon", systemImage: "hand.thumbsdown")
+                    Label("Show less like this", systemImage: "hand.thumbsdown")
                 }
                 Button(role: .destructive, action: onHide) {
-                    Label("Nicht nochmal", systemImage: "eye.slash")
+                    Label("Don't show again", systemImage: "eye.slash")
                 }
             } label: {
                 Image(systemName: "ellipsis")

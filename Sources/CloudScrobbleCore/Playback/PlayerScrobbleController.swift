@@ -22,6 +22,16 @@ public enum PlaybackRepeatMode: String, CaseIterable, Sendable {
     case one
 }
 
+public struct ScrobbleConfigurationUpdate: Equatable, Sendable {
+    public let metadata: LastFMTrackMeta
+    public let isEnabled: Bool
+
+    public init(metadata: LastFMTrackMeta, isEnabled: Bool) {
+        self.metadata = metadata
+        self.isEnabled = isEnabled
+    }
+}
+
 @MainActor
 public final class PlayerScrobbleController: ObservableObject {
     @Published public private(set) var phase: PlaybackPhase = .idle
@@ -37,15 +47,17 @@ public final class PlayerScrobbleController: ObservableObject {
     @Published public private(set) var lastScrobbleError: String?
     @Published public private(set) var scrobbleHistory: [ScrobbleHistoryEntry] = []
     @Published public private(set) var skippedUnplayableCount = 0
+    @Published public private(set) var sleepTimerEndsAt: Date?
 
+    private static let playerItemWindowSize = 12
     private let player = AVQueuePlayer()
     private let scrobbleEngine = ScrobbleEngine()
-    private var timeObserver: Any?
-    private var endObserver: NSObjectProtocol?
-    private var failedObserver: NSObjectProtocol?
-    private var stalledObserver: NSObjectProtocol?
-    private var interruptionObserver: NSObjectProtocol?
-    private var routeChangeObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var timeObserver: Any?
+    nonisolated(unsafe) private var endObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var failedObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var stalledObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var interruptionObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var routeChangeObserver: NSObjectProtocol?
     private var debugDismissalTask: Task<Void, Never>?
     private var orderedQueue: [QueueItem] = []
     private var shouldResumeAfterInterruption = false
@@ -55,6 +67,12 @@ public final class PlayerScrobbleController: ObservableObject {
     private var currentPlayerItemID: ObjectIdentifier?
     private var playbackDispatchGeneration = UUID()
     private var nowPlayingDispatchTask: Task<Void, Never>?
+    private var sleepTimerTask: Task<Void, Never>?
+    private var nextPlayerQueueIndex = 0
+    private var progressiveRestoreRecoverySnapshot: SavedPlaybackSnapshot?
+#if os(iOS) && canImport(MediaPlayer)
+    nonisolated(unsafe) private var remoteCommandTargets: [(command: MPRemoteCommand, target: Any)] = []
+#endif
 
     private let persistence = PlaybackPersistenceStore()
     private let nowPlayingInfo = NowPlayingInfoCoordinator()
@@ -97,6 +115,33 @@ public final class PlayerScrobbleController: ObservableObject {
                 playbackRate: self.isPlaying ? 1 : 0
             )
         }
+    }
+
+    deinit {
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+        }
+
+        let notificationCenter = NotificationCenter.default
+        for observer in [
+            endObserver,
+            failedObserver,
+            stalledObserver,
+            interruptionObserver,
+            routeChangeObserver
+        ].compactMap({ $0 }) {
+            notificationCenter.removeObserver(observer)
+        }
+
+        debugDismissalTask?.cancel()
+        stalledRecoveryTask?.cancel()
+        nowPlayingDispatchTask?.cancel()
+        sleepTimerTask?.cancel()
+#if os(iOS) && canImport(MediaPlayer)
+        for registration in remoteCommandTargets {
+            registration.command.removeTarget(registration.target)
+        }
+#endif
     }
 
     public func setLastFMScrobbler(_ scrobbler: LastFMScrobbleSending?) {
@@ -148,6 +193,7 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func loadQueue(_ items: [QueueItem], startAt index: Int = 0) {
+        progressiveRestoreRecoverySnapshot = nil
         orderedQueue = items
         let prepared = preparedQueue(items, startAt: index)
         queue = prepared.items
@@ -157,6 +203,7 @@ public final class PlayerScrobbleController: ObservableObject {
             player.removeAllItems()
             activePlayerItemIDs.removeAll()
             currentPlayerItemID = nil
+            nextPlayerQueueIndex = 0
             phase = .idle
             elapsedSeconds = 0
             scrobbleEngine.stop()
@@ -179,7 +226,10 @@ public final class PlayerScrobbleController: ObservableObject {
         let current = queue[currentIndex]
 
         if isShuffleEnabled {
-            let remaining = orderedQueue.filter { $0.trackURN != current.trackURN }
+            var remaining = orderedQueue
+            if let currentOrderedIndex = remaining.firstIndex(where: { $0.trackURN == current.trackURN }) {
+                remaining.remove(at: currentOrderedIndex)
+            }
             queue = [current] + remaining.shuffled()
             persistPlaybackSnapshot()
             rebuildPlayerQueue(startAt: 0)
@@ -197,22 +247,44 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func appendToQueue(_ item: QueueItem, showDebug: Bool = true) {
-        orderedQueue.append(item)
-        queue.append(item)
+        appendToQueue([item], showDebug: showDebug)
+    }
 
-        let playerItem = makeTrackedPlayerItem(for: item)
-        if player.canInsert(playerItem, after: nil) {
-            player.insert(playerItem, after: nil)
-        }
+    /// Appends a resolved batch with one queue publication and one snapshot
+    /// write. This keeps progressive playlist loading linear for long queues.
+    public func appendToQueue(_ items: [QueueItem], showDebug: Bool = true) {
+        guard !items.isEmpty else { return }
+
+        orderedQueue.append(contentsOf: items)
+        queue.append(contentsOf: items)
 
         if currentIndex == nil {
             rebuildPlayerQueue(startAt: 0)
-        } else if showDebug {
-            persistPlaybackSnapshot()
-            setDebugStatus("Added to queue", autoDismissAfter: 2_500_000_000)
-        } else {
-            persistPlaybackSnapshot()
+            return
         }
+
+        fillPlayerQueueWindow()
+        persistPlaybackSnapshot()
+        if showDebug {
+            let message = items.count == 1 ? "Added to queue" : "Added \(items.count) tracks to queue"
+            setDebugStatus(message, autoDismissAfter: 2_500_000_000)
+        }
+    }
+
+    /// Inserts restored tracks that originally appeared before the active
+    /// item without restarting that item or disturbing its scrobble progress.
+    public func prependToQueuePreservingCurrent(_ items: [QueueItem]) {
+        guard !items.isEmpty,
+              let currentIndex,
+              queue.indices.contains(currentIndex) else {
+            return
+        }
+
+        queue.insert(contentsOf: items, at: 0)
+        orderedQueue.insert(contentsOf: items, at: 0)
+        self.currentIndex = currentIndex + items.count
+        nextPlayerQueueIndex += items.count
+        persistPlaybackSnapshot()
     }
 
     public func playNext(_ item: QueueItem) {
@@ -221,16 +293,12 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
 
+        let wasPlaying = isPlaying
+        let resumeTime = elapsedSeconds
         let insertIndex = min(currentIndex + 1, queue.count)
         queue.insert(item, at: insertIndex)
         orderedQueue.insert(item, at: min(insertIndex, orderedQueue.count))
-
-        let playerItem = makeTrackedPlayerItem(for: item)
-        if player.canInsert(playerItem, after: player.currentItem) {
-            player.insert(playerItem, after: player.currentItem)
-        }
-
-        persistPlaybackSnapshot()
+        rebuildPlayerQueuePreservingCurrent(resumeAt: resumeTime, shouldPlay: wasPlaying)
         setDebugStatus("Added next", autoDismissAfter: 2_500_000_000)
     }
 
@@ -247,7 +315,9 @@ public final class PlayerScrobbleController: ObservableObject {
         let removingCurrent = index == currentIndex
         let removedURN = queue[index].trackURN
         queue.remove(at: index)
-        orderedQueue.removeAll { $0.trackURN == removedURN }
+        if let orderedIndex = orderedQueue.firstIndex(where: { $0.trackURN == removedURN }) {
+            orderedQueue.remove(at: orderedIndex)
+        }
 
         if removingCurrent {
             rebuildPlayerQueue(startAt: min(index, queue.count - 1))
@@ -266,27 +336,37 @@ public final class PlayerScrobbleController: ObservableObject {
             return
         }
 
-        let currentURN = currentItem?.trackURN
+        let previousCurrentIndex = currentIndex
         let resumeTime = elapsedSeconds
         let wasPlaying = isPlaying
         let item = queue.remove(at: source)
         queue.insert(item, at: destination)
         orderedQueue = queue
 
-        if let currentURN {
-            currentIndex = queue.firstIndex { $0.trackURN == currentURN }
+        if let previousCurrentIndex {
+            if previousCurrentIndex == source {
+                currentIndex = destination
+            } else if source < previousCurrentIndex, destination >= previousCurrentIndex {
+                currentIndex = previousCurrentIndex - 1
+            } else if source > previousCurrentIndex, destination <= previousCurrentIndex {
+                currentIndex = previousCurrentIndex + 1
+            } else {
+                currentIndex = previousCurrentIndex
+            }
         }
 
         rebuildPlayerQueuePreservingCurrent(resumeAt: resumeTime, shouldPlay: wasPlaying)
     }
 
     public func clearQueue() {
+        progressiveRestoreRecoverySnapshot = nil
         stalledRecoveryTask?.cancel()
         stalledRecoveryTask = nil
         player.pause()
         player.removeAllItems()
         activePlayerItemIDs.removeAll()
         currentPlayerItemID = nil
+        nextPlayerQueueIndex = 0
         queue = []
         orderedQueue = []
         currentIndex = nil
@@ -296,6 +376,7 @@ public final class PlayerScrobbleController: ObservableObject {
         invalidateCurrentPlaybackDispatch()
         clearNowPlayingInfo()
         clearSavedPlaybackSnapshot()
+        cancelSleepTimer(showStatus: false)
         setDebugStatus("Queue cleared", autoDismissAfter: 2_500_000_000)
     }
 
@@ -310,6 +391,94 @@ public final class PlayerScrobbleController: ObservableObject {
         persistence.clearScrobbleHistory()
     }
 
+    /// Applies a persisted Last.fm correction or exclusion to the logical
+    /// queue. Playback continues uninterrupted and listened-time progress is
+    /// preserved for the current track.
+    public func updateScrobbleConfiguration(
+        trackURN: String,
+        metadata: LastFMTrackMeta,
+        isEnabled: Bool
+    ) {
+        updateScrobbleConfigurations([
+            trackURN: ScrobbleConfigurationUpdate(metadata: metadata, isEnabled: isEnabled)
+        ])
+    }
+
+    /// Applies several corrections or exclusions with one queue publication
+    /// and one persistence pass. This keeps artist-wide changes linear even
+    /// for large playlists.
+    public func updateScrobbleConfigurations(
+        _ configurations: [String: ScrobbleConfigurationUpdate]
+    ) {
+        guard !configurations.isEmpty else {
+            return
+        }
+        let affectsQueue = queue.contains { configurations[$0.trackURN] != nil }
+        let affectsRecentlyPlayed = recentlyPlayed.contains { configurations[$0.trackURN] != nil }
+        guard affectsQueue || affectsRecentlyPlayed else { return }
+
+        func updatedItem(from oldItem: QueueItem) -> QueueItem {
+            guard let configuration = configurations[oldItem.trackURN] else { return oldItem }
+            return QueueItem(
+                trackURN: oldItem.trackURN,
+                title: configuration.metadata.track,
+                artistDisplay: configuration.metadata.artist,
+                artworkURL: oldItem.artworkURL,
+                permalinkURL: oldItem.permalinkURL,
+                streamURL: oldItem.streamURL,
+                streamHeaders: oldItem.streamHeaders,
+                durationSeconds: oldItem.durationSeconds,
+                lastFM: configuration.metadata,
+                scrobbleEnabled: configuration.isEnabled
+            )
+        }
+
+        queue = queue.map { updatedItem(from: $0) }
+        orderedQueue = orderedQueue.map { updatedItem(from: $0) }
+
+        var didUpdateRecent = false
+        recentlyPlayed = recentlyPlayed.map { saved in
+            guard let configuration = configurations[saved.trackURN] else {
+                return saved
+            }
+            didUpdateRecent = true
+            return SavedPlaybackTrack(
+                trackURN: saved.trackURN,
+                title: configuration.metadata.track,
+                artistDisplay: configuration.metadata.artist,
+                artworkURL: saved.artworkURL,
+                permalinkURL: saved.permalinkURL,
+                durationSeconds: saved.durationSeconds,
+                lastFM: configuration.metadata
+            )
+        }
+        if didUpdateRecent {
+            persistRecentlyPlayed()
+        }
+
+        let wasPlaying = isPlaying
+        var currentEvents: [ScrobbleEngineEvent] = []
+        if let currentIndex,
+           queue.indices.contains(currentIndex),
+           configurations[queue[currentIndex].trackURN] != nil {
+            let currentItem = queue[currentIndex]
+            invalidateCurrentPlaybackDispatch()
+            currentEvents = scrobbleEngine.updateTrack(currentItem)
+            phase = wasPlaying ? .playing(currentItem) : .paused(currentItem)
+            updateNowPlayingInfo(for: currentItem, playbackRate: wasPlaying ? 1 : 0)
+        }
+
+        persistPlaybackSnapshot()
+        dispatchLater(currentEvents)
+
+        if configurations.count == 1, let configuration = configurations.values.first {
+            setDebugStatus(
+                configuration.isEnabled ? "Scrobble metadata updated" : "Scrobbling disabled for this track",
+                autoDismissAfter: 3_000_000_000
+            )
+        }
+    }
+
     public func cycleRepeatMode() {
         switch repeatMode {
         case .off:
@@ -320,6 +489,53 @@ public final class PlayerScrobbleController: ObservableObject {
             repeatMode = .off
         }
         persistPlaybackSnapshot()
+    }
+
+    public func startSleepTimer(minutes: Int) {
+        startSleepTimer(after: TimeInterval(max(1, minutes) * 60))
+    }
+
+    /// Duration-based entry point also keeps the timer deterministic in tests.
+    public func startSleepTimer(after duration: TimeInterval) {
+        let duration = max(0.01, min(duration, 86_400))
+        sleepTimerTask?.cancel()
+        sleepTimerEndsAt = Date().addingTimeInterval(duration)
+        let nanoseconds = UInt64(duration * 1_000_000_000)
+
+        sleepTimerTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            self.sleepTimerTask = nil
+            self.sleepTimerEndsAt = nil
+            self.pauseForSleepTimer()
+        }
+
+        setDebugStatus("Sleep timer set", autoDismissAfter: 2_500_000_000)
+    }
+
+    public func cancelSleepTimer() {
+        cancelSleepTimer(showStatus: true)
+    }
+
+    private func cancelSleepTimer(showStatus: Bool) {
+        guard sleepTimerTask != nil || sleepTimerEndsAt != nil else { return }
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        sleepTimerEndsAt = nil
+        if showStatus {
+            setDebugStatus("Sleep timer cancelled", autoDismissAfter: 2_500_000_000)
+        }
+    }
+
+    private func pauseForSleepTimer() {
+        player.pause()
+        scrobbleEngine.pause()
+        if let item = currentItem {
+            phase = .paused(item)
+            updateNowPlayingInfo(for: item, playbackRate: 0)
+            persistPlaybackSnapshot()
+        }
+        setDebugStatus("Sleep timer finished", autoDismissAfter: 3_500_000_000)
     }
 
     public func togglePlayback() {
@@ -359,11 +575,21 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     public func clearSavedPlaybackSnapshot() {
+        if let progressiveRestoreRecoverySnapshot {
+            persistence.saveSnapshot(progressiveRestoreRecoverySnapshot)
+            lastSnapshotPersistedAt = Date()
+            return
+        }
+        progressiveRestoreRecoverySnapshot = nil
         lastSnapshotPersistedAt = nil
         persistence.clearSnapshot()
     }
 
-    public func restoreSavedQueue(_ items: [QueueItem], from snapshot: SavedPlaybackSnapshot) {
+    public func restoreSavedQueue(
+        _ items: [QueueItem],
+        from snapshot: SavedPlaybackSnapshot,
+        recoverySnapshot: SavedPlaybackSnapshot? = nil
+    ) {
         guard items.indices.contains(snapshot.currentIndex) else {
             clearSavedPlaybackSnapshot()
             return
@@ -375,18 +601,7 @@ public final class PlayerScrobbleController: ObservableObject {
         repeatMode = PlaybackRepeatMode(rawValue: snapshot.repeatModeRawValue) ?? .off
         currentIndex = snapshot.currentIndex
         elapsedSeconds = max(0, snapshot.elapsedSeconds)
-        player.removeAllItems()
-        activePlayerItemIDs.removeAll()
-        currentPlayerItemID = nil
-
-        for item in queue[snapshot.currentIndex...] {
-            let playerItem = makeTrackedPlayerItem(for: item)
-            if player.canInsert(playerItem, after: nil) {
-                player.insert(playerItem, after: nil)
-            }
-        }
-
-        syncCurrentPlayerItemID()
+        resetPlayerItems(startAt: snapshot.currentIndex)
         let item = queue[snapshot.currentIndex]
         let target = CMTime(seconds: elapsedSeconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
@@ -398,6 +613,20 @@ public final class PlayerScrobbleController: ObservableObject {
         )
         phase = .paused(item)
         updateNowPlayingInfo(for: item, playbackRate: 0)
+        if let recoverySnapshot {
+            progressiveRestoreRecoverySnapshot = recoverySnapshot
+            persistence.saveSnapshot(recoverySnapshot)
+            lastSnapshotPersistedAt = Date()
+        } else {
+            persistPlaybackSnapshot()
+        }
+    }
+
+    /// Ends the short persistence suspension used while a saved queue is
+    /// being reconstructed around the active item, then stores the full queue.
+    public func completeProgressiveQueueRestore() {
+        guard progressiveRestoreRecoverySnapshot != nil else { return }
+        progressiveRestoreRecoverySnapshot = nil
         persistPlaybackSnapshot()
     }
 
@@ -412,6 +641,7 @@ public final class PlayerScrobbleController: ObservableObject {
         }
 
         player.advanceToNextItem()
+        fillPlayerQueueWindow()
         let events = startTrackState(at: nextIndex, playbackRate: 1)
         configureAudioSession()
         player.play()
@@ -439,16 +669,7 @@ public final class PlayerScrobbleController: ObservableObject {
         configureAudioSession()
         player.volume = 1
         player.pause()
-        player.removeAllItems()
-        activePlayerItemIDs.removeAll()
-        currentPlayerItemID = nil
-
-        for item in queue[index...] {
-            let playerItem = makeTrackedPlayerItem(for: item)
-            if player.canInsert(playerItem, after: nil) {
-                player.insert(playerItem, after: nil)
-            }
-        }
+        resetPlayerItems(startAt: index)
 
         let events = startTrackState(at: index, playbackRate: 1)
         persistPlaybackSnapshot()
@@ -510,6 +731,33 @@ public final class PlayerScrobbleController: ObservableObject {
         let playerItem = makePlayerItem(for: item)
         activePlayerItemIDs.insert(ObjectIdentifier(playerItem))
         return playerItem
+    }
+
+    /// Replaces AVQueuePlayer's concrete queue with a small window. The full
+    /// logical queue remains published for editing and persistence.
+    private func resetPlayerItems(startAt index: Int) {
+        player.removeAllItems()
+        activePlayerItemIDs.removeAll()
+        currentPlayerItemID = nil
+        nextPlayerQueueIndex = index
+        fillPlayerQueueWindow()
+        syncCurrentPlayerItemID()
+    }
+
+    private func fillPlayerQueueWindow() {
+        while player.items().count < Self.playerItemWindowSize,
+              queue.indices.contains(nextPlayerQueueIndex) {
+            let playerItem = makeTrackedPlayerItem(for: queue[nextPlayerQueueIndex])
+            guard player.canInsert(playerItem, after: nil) else {
+                activePlayerItemIDs.remove(ObjectIdentifier(playerItem))
+                break
+            }
+            player.insert(playerItem, after: nil)
+            nextPlayerQueueIndex += 1
+        }
+
+        activePlayerItemIDs = Set(player.items().map(ObjectIdentifier.init))
+        syncCurrentPlayerItemID()
     }
 
     private func isActivePlayerItemID(_ playerItemID: ObjectIdentifier?) -> Bool {
@@ -739,6 +987,7 @@ public final class PlayerScrobbleController: ObservableObject {
         }
 
         advancePastPlayerItemIfNeeded(finishedPlayerItemID)
+        fillPlayerQueueWindow()
         let events = startTrackState(at: nextIndex, playbackRate: 1)
         configureAudioSession()
         player.play()
@@ -783,13 +1032,16 @@ public final class PlayerScrobbleController: ObservableObject {
         if queue.indices.contains(failedIndex) {
             let failedURN = queue[failedIndex].trackURN
             queue.remove(at: failedIndex)
-            orderedQueue.removeAll { $0.trackURN == failedURN }
+            if let orderedIndex = orderedQueue.firstIndex(where: { $0.trackURN == failedURN }) {
+                orderedQueue.remove(at: orderedIndex)
+            }
         }
 
         player.pause()
         player.removeAllItems()
         activePlayerItemIDs.removeAll()
         currentPlayerItemID = nil
+        nextPlayerQueueIndex = 0
 
         guard !queue.isEmpty else {
             scrobbleEngine.stop()
@@ -870,7 +1122,7 @@ public final class PlayerScrobbleController: ObservableObject {
         let commandCenter = MPRemoteCommandCenter.shared()
 
         commandCenter.playCommand.isEnabled = true
-        commandCenter.playCommand.addTarget { [weak self] _ in
+        let playTarget = commandCenter.playCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
                 if case .paused = self?.phase {
                     self?.togglePlayback()
@@ -878,9 +1130,10 @@ public final class PlayerScrobbleController: ObservableObject {
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.playCommand, playTarget))
 
         commandCenter.pauseCommand.isEnabled = true
-        commandCenter.pauseCommand.addTarget { [weak self] _ in
+        let pauseTarget = commandCenter.pauseCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
                 if case .playing = self?.phase {
                     self?.togglePlayback()
@@ -888,33 +1141,37 @@ public final class PlayerScrobbleController: ObservableObject {
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.pauseCommand, pauseTarget))
 
         commandCenter.togglePlayPauseCommand.isEnabled = true
-        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+        let toggleTarget = commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.togglePlayback()
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.togglePlayPauseCommand, toggleTarget))
 
         commandCenter.nextTrackCommand.isEnabled = true
-        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+        let nextTarget = commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.next()
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.nextTrackCommand, nextTarget))
 
         commandCenter.previousTrackCommand.isEnabled = true
-        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+        let previousTarget = commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.previous()
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.previousTrackCommand, previousTarget))
 
         commandCenter.changePlaybackPositionCommand.isEnabled = true
-        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+        let positionTarget = commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
@@ -924,6 +1181,7 @@ public final class PlayerScrobbleController: ObservableObject {
             }
             return .success
         }
+        remoteCommandTargets.append((commandCenter.changePlaybackPositionCommand, positionTarget))
 #endif
     }
 
@@ -1068,6 +1326,7 @@ public final class PlayerScrobbleController: ObservableObject {
     }
 
     private func persistPlaybackSnapshot(force: Bool = true) {
+        guard progressiveRestoreRecoverySnapshot == nil else { return }
         guard let currentIndex, queue.indices.contains(currentIndex), !queue.isEmpty else {
             return
         }
@@ -1101,18 +1360,7 @@ public final class PlayerScrobbleController: ObservableObject {
         let item = queue[currentIndex]
         let savedScrobbleState = scrobbleEngine.state
         player.pause()
-        player.removeAllItems()
-        activePlayerItemIDs.removeAll()
-        currentPlayerItemID = nil
-
-        for item in queue[currentIndex...] {
-            let playerItem = makeTrackedPlayerItem(for: item)
-            if player.canInsert(playerItem, after: nil) {
-                player.insert(playerItem, after: nil)
-            }
-        }
-
-        syncCurrentPlayerItemID()
+        resetPlayerItems(startAt: currentIndex)
         let target = CMTime(seconds: max(0, seconds), preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
         elapsedSeconds = max(0, seconds)

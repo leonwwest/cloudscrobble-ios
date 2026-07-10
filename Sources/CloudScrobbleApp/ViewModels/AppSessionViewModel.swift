@@ -25,6 +25,7 @@ final class AppSessionViewModel: ObservableObject {
     private static let initialPlaybackScanLimit = 16
     private static let queueFillBatchSize = 6
     private static let prefetchWindowSize = 10
+    private static let savedPlaybackRestoreWindowSize = 6
 
     @Published var soundCloudConnected = false
     @Published var soundCloudPublicMode = false
@@ -55,6 +56,7 @@ final class AppSessionViewModel: ObservableObject {
     private let lastFMAuthService: LastFMAuthenticating?
     private let lastFMScrobbleService: LastFMScrobbleSending?
     private let lastFMTasteService: LastFMTasteFetching?
+    private let scrobblePreferences = ScrobblePreferencesStore()
     private var pendingSoundCloudAuthorization: PendingSoundCloudAuthorization?
     private var statusDismissalTask: Task<Void, Never>?
     private var queueFillTask: Task<Void, Never>?
@@ -176,6 +178,137 @@ final class AppSessionViewModel: ObservableObject {
         return await lastFMScrobbleService.pendingScrobbleCount()
     }
 
+    func scrobbleConfiguration(for item: QueueItem) async -> ScrobbleTrackConfiguration {
+        await scrobblePreferences.configuration(for: item.trackURN, fallback: item.lastFM)
+    }
+
+    func saveScrobbleConfiguration(
+        for item: QueueItem,
+        artist: String,
+        track: String,
+        isTrackEnabled: Bool,
+        isArtistExcluded: Bool
+    ) async {
+        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let track = track.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !artist.isEmpty, !track.isEmpty else {
+            statusMessage = "Artist and track title are required"
+            return
+        }
+
+        let previous = await scrobblePreferences.configuration(for: item.trackURN, fallback: item.lastFM)
+        if await scrobblePreferences.automaticMetadata(for: item.trackURN) == nil {
+            await scrobblePreferences.registerAutomaticMetadata(item.lastFM, for: item.trackURN)
+        }
+        if previous.isArtistExcluded {
+            await scrobblePreferences.setArtistExcluded(false, artist: previous.metadata.artist)
+        }
+
+        let metadata = LastFMTrackMeta(artist: artist, track: track)
+        await scrobblePreferences.setMetadataOverride(metadata, for: item.trackURN)
+        await scrobblePreferences.setTrackExcluded(!isTrackEnabled, trackURN: item.trackURN)
+        await scrobblePreferences.setArtistExcluded(isArtistExcluded, artist: artist)
+
+        let configuration = await scrobblePreferences.configuration(for: item.trackURN, fallback: metadata)
+        await applyScrobblePreferencesToPlaybackState(fallbackOverrides: [item.trackURN: metadata])
+        statusMessage = configuration.isScrobblingEnabled
+            ? "Scrobble metadata saved"
+            : "Scrobbling disabled for this selection"
+    }
+
+    func resetScrobbleConfiguration(for item: QueueItem) async {
+        let existing = await scrobblePreferences.configuration(for: item.trackURN, fallback: item.lastFM)
+        await scrobblePreferences.setTrackExcluded(false, trackURN: item.trackURN)
+        await scrobblePreferences.setArtistExcluded(false, artist: existing.metadata.artist)
+        await scrobblePreferences.resetMetadataOverride(for: item.trackURN)
+
+        let fallback: LastFMTrackMeta
+        if let api = activeSoundCloudAPIClient,
+           let track = try? await api.track(urn: item.trackURN) {
+            fallback = MetadataMapper.mapLastFM(track: track)
+            await scrobblePreferences.registerAutomaticMetadata(fallback, for: item.trackURN)
+        } else {
+            fallback = await scrobblePreferences.automaticMetadata(for: item.trackURN) ?? item.lastFM
+        }
+        await applyScrobblePreferencesToPlaybackState(fallbackOverrides: [item.trackURN: fallback])
+        statusMessage = "Scrobble settings reset for this track"
+    }
+
+    func resetAllScrobblePreferences() async {
+        await scrobblePreferences.resetAll()
+
+        var candidateFallbacks: [String: LastFMTrackMeta] = [:]
+        for saved in playerController.recentlyPlayed {
+            candidateFallbacks[saved.trackURN] = saved.lastFM
+        }
+        for item in playerController.queue {
+            candidateFallbacks[item.trackURN] = item.lastFM
+        }
+        let candidateURNs = Array(candidateFallbacks.keys)
+        var automaticMetadata: [String: LastFMTrackMeta] = [:]
+        for trackURN in candidateURNs {
+            if let stored = await scrobblePreferences.automaticMetadata(for: trackURN) {
+                automaticMetadata[trackURN] = stored
+            }
+        }
+        if let api = activeSoundCloudAPIClient {
+            for batchStart in stride(from: 0, to: candidateURNs.count, by: Self.queueFillBatchSize) {
+                let batchEnd = min(batchStart + Self.queueFillBatchSize, candidateURNs.count)
+                let batch = Array(candidateURNs[batchStart..<batchEnd])
+                let resolved = await withTaskGroup(of: (String, LastFMTrackMeta)?.self) { group in
+                    for trackURN in batch {
+                        group.addTask {
+                            guard let track = try? await api.track(urn: trackURN) else { return nil }
+                            return (trackURN, MetadataMapper.mapLastFM(track: track))
+                        }
+                    }
+
+                    var values: [(String, LastFMTrackMeta)] = []
+                    for await value in group {
+                        if let value { values.append(value) }
+                    }
+                    return values
+                }
+                for (trackURN, metadata) in resolved {
+                    automaticMetadata[trackURN] = metadata
+                }
+            }
+        }
+        await scrobblePreferences.registerAutomaticMetadata(automaticMetadata)
+
+        await applyScrobblePreferencesToPlaybackState(fallbackOverrides: automaticMetadata)
+        statusMessage = "Scrobble preferences reset"
+    }
+
+    /// Re-evaluates the queue and recently played history because an artist
+    /// exclusion can affect several tracks at once. Optional fallbacks restore
+    /// automatic SoundCloud metadata after removing a per-track override.
+    private func applyScrobblePreferencesToPlaybackState(
+        fallbackOverrides: [String: LastFMTrackMeta] = [:]
+    ) async {
+        var fallbackByTrackURN: [String: LastFMTrackMeta] = [:]
+        for saved in playerController.recentlyPlayed {
+            fallbackByTrackURN[saved.trackURN] = saved.lastFM
+        }
+        for item in playerController.queue {
+            fallbackByTrackURN[item.trackURN] = item.lastFM
+        }
+        fallbackOverrides.forEach { fallbackByTrackURN[$0.key] = $0.value }
+
+        var updates: [String: ScrobbleConfigurationUpdate] = [:]
+        for (trackURN, fallback) in fallbackByTrackURN {
+            let configuration = await scrobblePreferences.configuration(
+                for: trackURN,
+                fallback: fallback
+            )
+            updates[trackURN] = ScrobbleConfigurationUpdate(
+                metadata: configuration.metadata,
+                isEnabled: configuration.isScrobblingEnabled
+            )
+        }
+        playerController.updateScrobbleConfigurations(updates)
+    }
+
     func lastFMTasteProfile(limit: Int = 50) async -> LastFMTasteProfile? {
         guard lastFMConnected, let lastFMTasteService else { return nil }
         return try? await lastFMTasteService.tasteProfile(limit: limit)
@@ -267,9 +400,14 @@ final class AppSessionViewModel: ObservableObject {
                 redirectURI: config.soundCloudRedirectURI
             )
 
-            _ = try callbackScheme(from: config.soundCloudRedirectURI)
+            let scheme = try callbackScheme(from: config.soundCloudRedirectURI)
+#if os(iOS)
+            let callbackURL = try await browserClient.authenticate(url: authURL, callbackScheme: scheme)
+            await handleIncomingOAuthCallback(callbackURL)
+#else
             try browserClient.open(url: authURL)
             statusMessage = "Continue SoundCloud login in browser and return to the app."
+#endif
         } catch {
             pendingSoundCloudAuthorization = nil
             statusMessage = normalizedAuthErrorMessage(error)
@@ -830,8 +968,9 @@ final class AppSessionViewModel: ObservableObject {
         skippedCount initialSkippedCount: Int
     ) {
         guard !tracks.isEmpty else { return }
+        let preferences = scrobblePreferences
 
-        queueFillTask = Task { [weak self, tracks, resolver, generation] in
+        queueFillTask = Task { [weak self, tracks, resolver, generation, preferences] in
             var loadedCount = initialLoadedCount
             var skippedCount = initialSkippedCount
             var offset = 0
@@ -842,21 +981,20 @@ final class AppSessionViewModel: ObservableObject {
                 let batchTracks = Array(tracks[offset..<upperBound])
                 let batch = await Self.resolveQueueItems(
                     for: batchTracks,
-                    resolver: resolver
+                    resolver: resolver,
+                    preferences: preferences
                 )
                 offset = upperBound
                 skippedCount += batch.skippedCount
 
-                for item in batch.items {
-                    guard !Task.isCancelled else { return }
-                    let shouldContinue = await MainActor.run { [weak self] in
-                        guard let self, self.queueFillGeneration == generation else { return false }
-                        self.playerController.appendToQueue(item, showDebug: false)
-                        return true
-                    }
-                    guard shouldContinue else { return }
-                    loadedCount += 1
+                guard !Task.isCancelled else { return }
+                let shouldContinue = await MainActor.run { [weak self] in
+                    guard let self, self.queueFillGeneration == generation else { return false }
+                    self.playerController.appendToQueue(batch.items, showDebug: false)
+                    return true
                 }
+                guard shouldContinue else { return }
+                loadedCount += batch.items.count
             }
 
             await MainActor.run { [weak self] in
@@ -882,8 +1020,9 @@ final class AppSessionViewModel: ObservableObject {
     ) {
         guard !initialTracks.isEmpty || nextHref != nil else { return }
         guard let api = apiClient else { return }
+        let preferences = scrobblePreferences
 
-        queueFillTask = Task { [weak self, api, initialTracks, playlistURN, nextHref, resolver, generation] in
+        queueFillTask = Task { [weak self, api, initialTracks, playlistURN, nextHref, resolver, generation, preferences] in
             var loadedCount = initialLoadedCount
             var skippedCount = initialSkippedCount
             var tracksToAppend = initialTracks
@@ -897,21 +1036,20 @@ final class AppSessionViewModel: ObservableObject {
                     let batchTracks = Array(tracksToAppend[offset..<upperBound])
                     let batch = await Self.resolveQueueItems(
                         for: batchTracks,
-                        resolver: resolver
+                        resolver: resolver,
+                        preferences: preferences
                     )
                     offset = upperBound
                     skippedCount += batch.skippedCount
 
-                    for item in batch.items {
-                        guard !Task.isCancelled else { return }
-                        let shouldContinue = await MainActor.run { [weak self] in
-                            guard let self, self.queueFillGeneration == generation else { return false }
-                            self.playerController.appendToQueue(item, showDebug: false)
-                            return true
-                        }
-                        guard shouldContinue else { return }
-                        loadedCount += 1
+                    guard !Task.isCancelled else { return }
+                    let shouldContinue = await MainActor.run { [weak self] in
+                        guard let self, self.queueFillGeneration == generation else { return false }
+                        self.playerController.appendToQueue(batch.items, showDebug: false)
+                        return true
                     }
+                    guard shouldContinue else { return }
+                    loadedCount += batch.items.count
                 }
 
                 guard let href = nextPageHref else { break }
@@ -970,11 +1108,15 @@ final class AppSessionViewModel: ObservableObject {
         return tracks
     }
 
-    private nonisolated func makeQueueItem(
+    private func makeQueueItem(
         for track: SCTrack,
         resolver: PlaybackResolving
     ) async throws -> QueueItem {
-        try await Self.makeQueueItem(for: track, resolver: resolver)
+        try await Self.makeQueueItem(
+            for: track,
+            resolver: resolver,
+            preferences: scrobblePreferences
+        )
     }
 
     private func prepareInitialPlaybackQueue(
@@ -995,7 +1137,11 @@ final class AppSessionViewModel: ObservableObject {
                 : min(Self.queueFillBatchSize, playbackOrder.count - offset)
             let upperBound = min(playbackOrder.count, offset + batchSize)
             let batchTracks = Array(playbackOrder[offset..<upperBound])
-            let batch = await Self.resolveQueueItems(for: batchTracks, resolver: resolver)
+            let batch = await Self.resolveQueueItems(
+                for: batchTracks,
+                resolver: resolver,
+                preferences: scrobblePreferences
+            )
             items.append(contentsOf: batch.items)
             skippedCount += batch.skippedCount
             offset = upperBound
@@ -1014,18 +1160,31 @@ final class AppSessionViewModel: ObservableObject {
 
     private nonisolated static func resolveQueueItems(
         for tracks: [SCTrack],
-        resolver: PlaybackResolving
+        resolver: PlaybackResolving,
+        preferences: ScrobblePreferencesStore
     ) async -> QueueResolveBatch {
         guard !tracks.isEmpty else {
             return QueueResolveBatch(items: [], skippedCount: 0)
         }
+
+        var computedMetadata: [String: LastFMTrackMeta] = [:]
+        for track in tracks {
+            computedMetadata[track.urn] = MetadataMapper.mapLastFM(track: track)
+        }
+        let mappedMetadata = computedMetadata
+        await preferences.registerAutomaticMetadata(mappedMetadata)
 
         var resolved = Array<QueueItem?>(repeating: nil, count: tracks.count)
 
         await withTaskGroup(of: (Int, QueueItem?).self) { group in
             for (index, track) in tracks.enumerated() {
                 group.addTask {
-                    let item = try? await makeQueueItem(for: track, resolver: resolver)
+                    let item = try? await makeQueueItem(
+                        for: track,
+                        resolver: resolver,
+                        preferences: preferences,
+                        mappedMetadata: mappedMetadata[track.urn]
+                    )
                     return (index, item)
                 }
             }
@@ -1043,10 +1202,17 @@ final class AppSessionViewModel: ObservableObject {
 
     private nonisolated static func makeQueueItem(
         for track: SCTrack,
-        resolver: PlaybackResolving
+        resolver: PlaybackResolving,
+        preferences: ScrobblePreferencesStore,
+        mappedMetadata: LastFMTrackMeta? = nil
     ) async throws -> QueueItem {
         let stream = try await resolver.resolvePlayableStream(for: track.urn)
-        let lastFM = MetadataMapper.mapLastFM(track: track)
+        let mapped = mappedMetadata ?? MetadataMapper.mapLastFM(track: track)
+        if mappedMetadata == nil {
+            await preferences.registerAutomaticMetadata(mapped, for: track.urn)
+        }
+        let configuration = await preferences.configuration(for: track.urn, fallback: mapped)
+        let lastFM = configuration.metadata
         return QueueItem(
             trackURN: track.urn,
             title: lastFM.track,
@@ -1056,7 +1222,8 @@ final class AppSessionViewModel: ObservableObject {
             streamURL: stream.url,
             streamHeaders: stream.headers,
             durationSeconds: max(0, track.durationMs / 1000),
-            lastFM: lastFM
+            lastFM: lastFM,
+            scrobbleEnabled: configuration.isScrobblingEnabled
         )
     }
 
@@ -1072,34 +1239,205 @@ final class AppSessionViewModel: ObservableObject {
         }
 
         didAttemptPlaybackRestore = true
+        cancelQueueFill()
+        let generation = UUID()
+        queueFillGeneration = generation
+
+        let currentSavedTrack = snapshot.queue[snapshot.currentIndex]
+        let prefixTracks = Array(snapshot.queue[..<snapshot.currentIndex])
+        let forwardTracks = snapshot.currentIndex + 1 < snapshot.queue.count
+            ? Array(snapshot.queue[(snapshot.currentIndex + 1)...])
+            : []
 
         do {
-            var queueItems: [QueueItem] = []
-            queueItems.reserveCapacity(snapshot.queue.count)
+            let currentItem = try await Self.makeQueueItem(
+                for: currentSavedTrack,
+                resolver: playbackResolver,
+                preferences: scrobblePreferences
+            )
+            guard queueFillGeneration == generation else { return }
 
-            for savedTrack in snapshot.queue {
-                let stream = try await playbackResolver.resolvePlayableStream(for: savedTrack.trackURN)
-                queueItems.append(
-                    QueueItem(
-                        trackURN: savedTrack.trackURN,
-                        title: savedTrack.title,
-                        artistDisplay: savedTrack.artistDisplay,
-                        artworkURL: savedTrack.artworkURL,
-                        permalinkURL: savedTrack.permalinkURL,
-                        streamURL: stream.url,
-                        streamHeaders: stream.headers,
-                        durationSeconds: savedTrack.durationSeconds,
-                        lastFM: savedTrack.lastFM
-                    )
-                )
+            let initialForwardCount = min(
+                forwardTracks.count,
+                max(0, Self.savedPlaybackRestoreWindowSize - 1)
+            )
+            let initialTail = Array(forwardTracks.prefix(initialForwardCount))
+            let initialBatch = await Self.resolveSavedQueueItems(
+                for: initialTail,
+                resolver: playbackResolver,
+                preferences: scrobblePreferences
+            )
+            guard queueFillGeneration == generation else { return }
+
+            let initialItems = [currentItem] + initialBatch.items
+            let rebasedSnapshot = SavedPlaybackSnapshot(
+                queue: initialItems.map(SavedPlaybackTrack.init(queueItem:)),
+                currentIndex: 0,
+                elapsedSeconds: snapshot.elapsedSeconds,
+                scrobbleState: snapshot.scrobbleState,
+                repeatModeRawValue: snapshot.repeatModeRawValue,
+                isShuffleEnabled: snapshot.isShuffleEnabled
+            )
+            playerController.restoreSavedQueue(
+                initialItems,
+                from: rebasedSnapshot,
+                recoverySnapshot: snapshot
+            )
+
+            let remainingTracks = Array(forwardTracks.dropFirst(initialForwardCount))
+            guard !prefixTracks.isEmpty || !remainingTracks.isEmpty else {
+                playerController.completeProgressiveQueueRestore()
+                statusMessage = initialBatch.skippedCount == 0
+                    ? "Restored saved queue"
+                    : "Restored saved queue (\(initialBatch.skippedCount) unavailable)"
+                return
             }
 
-            playerController.restoreSavedQueue(queueItems, from: snapshot)
-            statusMessage = "Restored saved queue"
+            statusMessage = "Restored playback. Loading the rest of the queue"
+            startSavedQueueFillTask(
+                prefixTracks: prefixTracks,
+                tracks: remainingTracks,
+                resolver: playbackResolver,
+                generation: generation,
+                loadedCount: initialItems.count,
+                skippedCount: initialBatch.skippedCount
+            )
         } catch {
+            guard queueFillGeneration == generation else { return }
             playerController.clearSavedPlaybackSnapshot()
             statusMessage = "Saved queue could not be restored: \(error.localizedDescription)"
         }
+    }
+
+    private func startSavedQueueFillTask(
+        prefixTracks: [SavedPlaybackTrack],
+        tracks: [SavedPlaybackTrack],
+        resolver: PlaybackResolving,
+        generation: UUID,
+        loadedCount initialLoadedCount: Int,
+        skippedCount initialSkippedCount: Int
+    ) {
+        let preferences = scrobblePreferences
+        queueFillTask = Task { [weak self, prefixTracks, tracks, resolver, generation, preferences] in
+            var loadedCount = initialLoadedCount
+            var skippedCount = initialSkippedCount
+            var prefixEnd = prefixTracks.count
+
+            // Resolve the closest preceding tracks first. Each earlier batch
+            // is prepended, rebuilding the original order without restarting
+            // the active AVPlayer item.
+            while prefixEnd > 0 {
+                guard !Task.isCancelled else { return }
+                let lowerBound = max(0, prefixEnd - Self.queueFillBatchSize)
+                let batch = await Self.resolveSavedQueueItems(
+                    for: Array(prefixTracks[lowerBound..<prefixEnd]),
+                    resolver: resolver,
+                    preferences: preferences
+                )
+                prefixEnd = lowerBound
+                skippedCount += batch.skippedCount
+
+                guard !Task.isCancelled else { return }
+                let shouldContinue = await MainActor.run { [weak self] in
+                    guard let self, self.queueFillGeneration == generation else { return false }
+                    self.playerController.prependToQueuePreservingCurrent(batch.items)
+                    return true
+                }
+                guard shouldContinue else { return }
+                loadedCount += batch.items.count
+            }
+
+            var offset = 0
+
+            while offset < tracks.count {
+                guard !Task.isCancelled else { return }
+                let upperBound = min(tracks.count, offset + Self.queueFillBatchSize)
+                let batch = await Self.resolveSavedQueueItems(
+                    for: Array(tracks[offset..<upperBound]),
+                    resolver: resolver,
+                    preferences: preferences
+                )
+                offset = upperBound
+                skippedCount += batch.skippedCount
+
+                guard !Task.isCancelled else { return }
+                let shouldContinue = await MainActor.run { [weak self] in
+                    guard let self, self.queueFillGeneration == generation else { return false }
+                    self.playerController.appendToQueue(batch.items, showDebug: false)
+                    return true
+                }
+                guard shouldContinue else { return }
+                loadedCount += batch.items.count
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.queueFillGeneration == generation else { return }
+                self.playerController.completeProgressiveQueueRestore()
+                self.statusMessage = skippedCount == 0
+                    ? "Restored \(loadedCount) queued tracks"
+                    : "Restored \(loadedCount) queued tracks (\(skippedCount) unavailable)"
+                self.queueFillTask = nil
+            }
+        }
+    }
+
+    private nonisolated static func resolveSavedQueueItems(
+        for tracks: [SavedPlaybackTrack],
+        resolver: PlaybackResolving,
+        preferences: ScrobblePreferencesStore
+    ) async -> QueueResolveBatch {
+        guard !tracks.isEmpty else {
+            return QueueResolveBatch(items: [], skippedCount: 0)
+        }
+
+        var resolved = Array<QueueItem?>(repeating: nil, count: tracks.count)
+        await withTaskGroup(of: (Int, QueueItem?).self) { group in
+            for (index, track) in tracks.enumerated() {
+                group.addTask {
+                    let item = try? await makeQueueItem(
+                        for: track,
+                        resolver: resolver,
+                        preferences: preferences
+                    )
+                    return (index, item)
+                }
+            }
+
+            for await (index, item) in group {
+                resolved[index] = item
+            }
+        }
+
+        return QueueResolveBatch(
+            items: resolved.compactMap { $0 },
+            skippedCount: resolved.filter { $0 == nil }.count
+        )
+    }
+
+    private nonisolated static func makeQueueItem(
+        for savedTrack: SavedPlaybackTrack,
+        resolver: PlaybackResolving,
+        preferences: ScrobblePreferencesStore
+    ) async throws -> QueueItem {
+        let stream = try await resolver.resolvePlayableStream(for: savedTrack.trackURN)
+        let automatic = await preferences.automaticMetadata(for: savedTrack.trackURN)
+        let configuration = await preferences.configuration(
+            for: savedTrack.trackURN,
+            fallback: automatic ?? savedTrack.lastFM
+        )
+        let metadata = configuration.metadata
+        return QueueItem(
+            trackURN: savedTrack.trackURN,
+            title: metadata.track,
+            artistDisplay: metadata.artist,
+            artworkURL: savedTrack.artworkURL,
+            permalinkURL: savedTrack.permalinkURL,
+            streamURL: stream.url,
+            streamHeaders: stream.headers,
+            durationSeconds: savedTrack.durationSeconds,
+            lastFM: metadata,
+            scrobbleEnabled: configuration.isScrobblingEnabled
+        )
     }
 
     private func scheduleStatusDismissal(for message: String?) {

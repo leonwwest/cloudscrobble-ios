@@ -223,6 +223,7 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
     public let streamHeaders: [String: String]
     public let durationSeconds: Int
     public let lastFM: LastFMTrackMeta
+    public let scrobbleEnabled: Bool
 
     public var id: String { trackURN }
 
@@ -235,7 +236,8 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
         streamURL: URL,
         streamHeaders: [String: String] = [:],
         durationSeconds: Int,
-        lastFM: LastFMTrackMeta
+        lastFM: LastFMTrackMeta,
+        scrobbleEnabled: Bool = true
     ) {
         self.trackURN = trackURN
         self.title = title
@@ -246,6 +248,7 @@ public struct QueueItem: Equatable, Identifiable, Sendable {
         self.streamHeaders = streamHeaders
         self.durationSeconds = durationSeconds
         self.lastFM = lastFM
+        self.scrobbleEnabled = scrobbleEnabled
     }
 }
 

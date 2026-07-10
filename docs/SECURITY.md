@@ -11,8 +11,9 @@ header whose value matches the broker's `APP_API_KEY` secret. `/healthz` and
 
 - **Worker (production):** set the secret with
   `cd workers/soundcloud-token-broker && wrangler secret put APP_API_KEY`.
-  When the secret is absent the gate is disabled (local dev / smoke only); the
-  deployed worker **must** have it set.
+  Protected routes fail closed when the secret is absent. A local smoke worker
+  can explicitly opt out with `REQUIRE_APP_API_KEY=false`; production keeps the
+  default `true`.
 - **Go backend (local dev):** set `APP_API_KEY` in `backend/.env` or the
   environment. When unset, the gate is disabled so existing local flows keep
   working.
@@ -60,7 +61,17 @@ Add to `wrangler.jsonc`:
 ```
 
 When the binding is absent (local `wrangler dev`, smoke tests), rate limiting
-is skipped and the API-key gate is the sole protection.
+is skipped and the API-key gate is the sole protection. `/healthz` reports
+whether limiting was requested and whether the KV binding is actually active.
+If an active KV binding fails, `RATE_LIMIT_FAIL_CLOSED=true` returns 503 instead
+of silently bypassing protection; local development can explicitly set it to
+`false`.
+
+## Upstream deadlines
+
+SoundCloud and Last.fm requests are aborted after `UPSTREAM_TIMEOUT_MS`. The
+default is 10 seconds and values are bounded to 1–30 seconds. Timeouts return
+HTTP 504 with `upstream_timeout`; other transport failures return HTTP 502.
 
 ## Credential rotation
 

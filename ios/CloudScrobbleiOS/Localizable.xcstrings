@@ -1,94 +1,3882 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Set up CloudScrobble" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CloudScrobble einrichten"
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ - %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ - %2$@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
           }
         }
       }
     },
-    "Choose how you want to use SoundCloud first. You can connect Last.fm for scrobbles right after." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle zuerst, wie du SoundCloud nutzen willst. Last.fm kannst du direkt danach für Scrobbles verbinden."
+    "%@ tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Tracks"
           }
         }
       }
     },
-    "Connections" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbindungen"
+    "%arg - %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg – %2$arg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg - %2$arg"
           }
         }
       }
     },
-    "Get started" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loslegen"
+    "%arg artists rated · %arg tracks hidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Artists bewertet · %2$arg Tracks ausgeblendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg artists rated · %2$arg tracks hidden"
           }
         }
       }
     },
-    "Connect Last.fm" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Last.fm verbinden"
+    "%arg minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Minuten"
           }
         }
       }
     },
-    "CloudScrobble uses Last.fm for Now Playing and scrobbles. Playback works without Last.fm too." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CloudScrobble nutzt Last.fm für Now Playing und Scrobbles. Playback funktioniert auch ohne Last.fm."
+    "%arg of %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg von %2$arg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg of %2$arg"
           }
         }
       }
     },
-    "What is stored" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Was gespeichert wird"
+    "%arg pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg ausstehend"
           }
         }
       }
     },
-    "Your password is only sent to the token broker to obtain a Last.fm session key. The app then stores only that session key in the Keychain." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dein Passwort wird nur an den Token-Broker geschickt, um bei Last.fm einen Session-Key zu holen. Die App speichert danach nur diesen Session-Key im Keychain."
+    "%arg queued for retry.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg für einen erneuten Versuch vorgemerkt."
+          }
+        }
+      }
+    },
+    "%arg queued scrobbles": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg vorgemerkte Scrobbles"
+          }
+        }
+      }
+    },
+    "%arg Station": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender von %1$arg"
+          }
+        }
+      }
+    },
+    "%arg tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks"
+          }
+        }
+      }
+    },
+    "%arg tracks from Last.fm, likes, playlists, and Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks aus Last.fm, Likes, Playlists und Start"
+          }
+        }
+      }
+    },
+    "%arg tracks from scrobbles and top artists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks aus Scrobbles und Top-Artists"
+          }
+        }
+      }
+    },
+    "%arg tracks from your feed and follows": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks aus deinem Feed und deinen Followings"
+          }
+        }
+      }
+    },
+    "%arg tracks from your likes": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks aus deinen Likes"
+          }
+        }
+      }
+    },
+    "%arg tracks from your SoundCloud library": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks aus deiner SoundCloud-Mediathek"
+          }
+        }
+      }
+    },
+    "%arg tracks tuned from your library": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks, abgestimmt auf deine Mediathek"
+          }
+        }
+      }
+    },
+    "%arg tracks weighted by Last.fm, likes, and Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks, gewichtet nach Last.fm, Likes und Start"
+          }
+        }
+      }
+    },
+    "%arg tracks weighted heavily by Last.fm and likes": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg Tracks, stark nach Last.fm und Likes gewichtet"
+          }
+        }
+      }
+    },
+    "%arg unplayable tracks skipped": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg nicht abspielbare Tracks übersprungen"
+          }
+        }
+      }
+    },
+    "1 unplayable track skipped": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 nicht abspielbaren Track übersprungen"
+          }
+        }
+      }
+    },
+    "A Last.fm error usually means the session expired, Last.fm is temporarily unavailable, or the request hit a rate limit.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Last.fm-Fehler bedeutet meist, dass die Sitzung abgelaufen ist, Last.fm vorübergehend nicht verfügbar ist oder das Anfragelimit erreicht wurde."
+          }
+        }
+      }
+    },
+    "Active": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv"
+          }
+        }
+      }
+    },
+    "Add to Queue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Warteschlange hinzufügen"
+          }
+        }
+      }
+    },
+    "Add to queue failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinzufügen zur Warteschlange fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "Added to queue: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Warteschlange hinzugefügt: %1$arg"
+          }
+        }
+      }
+    },
+    "All": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        }
+      }
+    },
+    "App session unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Sitzung nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Artist and track title are required": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artist und Tracktitel sind erforderlich"
+          }
+        }
+      }
+    },
+    "Artist": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artist"
+          }
+        }
+      }
+    },
+    "Authenticated": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentifiziert"
+          }
+        }
+      }
+    },
+    "Back 15": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 Sekunden zurück"
+          }
+        }
+      }
+    },
+    "Back online": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wieder online"
+          }
+        }
+      }
+    },
+    "Best": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "Cancel sleep timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleeptimer abbrechen"
+          }
+        }
+      }
+    },
+    "Cellular": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mobilfunk"
+          }
+        }
+      }
+    },
+    "Choose audio output": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audioausgabe wählen"
+          }
+        }
+      }
+    },
+    "Choose how you want to use SoundCloud first. You can connect Last.fm for scrobbles right after.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle zuerst, wie du SoundCloud nutzen möchtest. Last.fm kannst du direkt danach für Scrobbles verbinden."
+          }
+        }
+      }
+    },
+    "Clear history": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf löschen"
+          }
+        }
+      }
+    },
+    "Clear queue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warteschlange leeren"
+          }
+        }
+      }
+    },
+    "Clear recently played": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt gespielt löschen"
+          }
+        }
+      }
+    },
+    "Clear recently played?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt gespielte Tracks löschen?"
+          }
+        }
+      }
+    },
+    "Clear scrobble history": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Verlauf löschen"
+          }
+        }
+      }
+    },
+    "Clear scrobble history?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Verlauf löschen?"
+          }
+        }
+      }
+    },
+    "Clear search": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche leeren"
+          }
+        }
+      }
+    },
+    "Clear the entire queue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesamte Warteschlange leeren?"
+          }
+        }
+      }
+    },
+    "Close": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        }
+      }
+    },
+    "Close collection": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sammlung schließen"
+          }
+        }
+      }
+    },
+    "Close playlist": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist schließen"
+          }
+        }
+      }
+    },
+    "CloudScrobble": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CloudScrobble"
+          }
+        }
+      }
+    },
+    "CloudScrobble uses Last.fm for Now Playing and scrobbles. Playback works without Last.fm too.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CloudScrobble nutzt Last.fm für ‚Now Playing‘ und Scrobbles. Die Wiedergabe funktioniert auch ohne Last.fm."
+          }
+        }
+      }
+    },
+    "Config missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konfiguration fehlt"
+          }
+        }
+      }
+    },
+    "Connect Last.fm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm verbinden"
+          }
+        }
+      }
+    },
+    "Connect SoundCloud first": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde zuerst SoundCloud"
+          }
+        }
+      }
+    },
+    "Connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
+          }
+        }
+      }
+    },
+    "Connections": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindungen"
+          }
+        }
+      }
+    },
+    "Connections reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindungen zurückgesetzt"
+          }
+        }
+      }
+    },
+    "Continue SoundCloud login in browser and return to the app.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setze den SoundCloud-Login im Browser fort und kehre anschließend zur App zurück."
+          }
+        }
+      }
+    },
+    "Continue without connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Verbindung fortfahren"
+          }
+        }
+      }
+    },
+    "Copy Link": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link kopieren"
+          }
+        }
+      }
+    },
+    "Current playback and the saved queue will be removed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die aktuelle Wiedergabe und die gespeicherte Warteschlange werden entfernt."
+          }
+        }
+      }
+    },
+    "Current status": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktueller Status"
+          }
+        }
+      }
+    },
+    "Daily Drops": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily Drops"
+          }
+        }
+      }
+    },
+    "Demo": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo"
+          }
+        }
+      }
+    },
+    "Demo Mode enabled: mock catalog only. Connect SoundCloud to play real audio.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo-Modus aktiviert: nur Beispielkatalog. Verbinde SoundCloud für echte Audioinhalte."
+          }
+        }
+      }
+    },
+    "Demo Mode has no audio playback. Connect SoundCloud or use Public Mode.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Demo-Modus gibt es keine Audiowiedergabe. Verbinde SoundCloud oder verwende den öffentlichen Modus."
+          }
+        }
+      }
+    },
+    "Demo Mode uses local sample data only. Switch to Public Mode or full login for real audio.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Demo-Modus verwendet nur lokale Beispieldaten. Wechsle für echte Audioinhalte in den öffentlichen Modus oder zum vollständigen Login."
+          }
+        }
+      }
+    },
+    "Demo Preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo-Vorschau"
+          }
+        }
+      }
+    },
+    "Details": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
+          }
+        }
+      }
+    },
+    "Diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose"
+          }
+        }
+      }
+    },
+    "Disconnect SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud trennen"
+          }
+        }
+      }
+    },
+    "Don't show again": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht noch einmal anzeigen"
+          }
+        }
+      }
+    },
+    "Drag to reorder": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Sortieren ziehen"
+          }
+        }
+      }
+    },
+    "Edit scrobble": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble bearbeiten"
+          }
+        }
+      }
+    },
+    "Enter a name above and open a playlist to play it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib oben einen Namen ein und öffne eine Playlist, um sie abzuspielen."
+          }
+        }
+      }
+    },
+    "Enter a track or artist above to get started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib oben einen Track oder Artist ein, um zu beginnen."
+          }
+        }
+      }
+    },
+    "Enter an artist or username and open the profile.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib einen Artist oder Benutzernamen ein und öffne das Profil."
+          }
+        }
+      }
+    },
+    "Exclude this artist": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Artist ausschließen"
+          }
+        }
+      }
+    },
+    "Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feed"
+          }
+        }
+      }
+    },
+    "Feed feedback reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feed-Anpassungen zurückgesetzt"
+          }
+        }
+      }
+    },
+    "Forward 15": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 Sekunden vor"
+          }
+        }
+      }
+    },
+    "From your feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus deinem Feed"
+          }
+        }
+      }
+    },
+    "Full Login": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vollständiger Login"
+          }
+        }
+      }
+    },
+    "Full SoundCloud Login": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vollständiger SoundCloud-Login"
+          }
+        }
+      }
+    },
+    "Full SoundCloud login is needed for your personal Start. Showing public discovery.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für deinen persönlichen Start ist der vollständige SoundCloud-Login erforderlich. Öffentliche Empfehlungen werden angezeigt."
+          }
+        }
+      }
+    },
+    "Get started": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loslegen"
+          }
+        }
+      }
+    },
+    "History": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        }
+      }
+    },
+    "Last personalization undone": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Personalisierung rückgängig gemacht"
+          }
+        }
+      }
+    },
+    "Last scrobble": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzter Scrobble"
+          }
+        }
+      }
+    },
+    "Last scrobble %arg.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzter Scrobble %1$arg."
+          }
+        }
+      }
+    },
+    "Last.fm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm"
+          }
+        }
+      }
+    },
+    "Last.fm connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm verbunden"
+          }
+        }
+      }
+    },
+    "Last.fm Connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm verbunden"
+          }
+        }
+      }
+    },
+    "Last.fm error": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Fehler"
+          }
+        }
+      }
+    },
+    "Last.fm metadata": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Metadaten"
+          }
+        }
+      }
+    },
+    "Last.fm needs attention": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm erfordert Aufmerksamkeit"
+          }
+        }
+      }
+    },
+    "Last.fm password": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Passwort"
+          }
+        }
+      }
+    },
+    "Last.fm Scrobbling": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Scrobbling"
+          }
+        }
+      }
+    },
+    "Last.fm Status": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Status"
+          }
+        }
+      }
+    },
+    "Last.fm Taste": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Geschmack"
+          }
+        }
+      }
+    },
+    "Last.fm username": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Benutzername"
+          }
+        }
+      }
+    },
+    "Library": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediathek"
+          }
+        }
+      }
+    },
+    "Library requires Full Login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Mediathek erfordert den vollständigen Login"
+          }
+        }
+      }
+    },
+    "Liked Playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorisierte Playlists"
+          }
+        }
+      }
+    },
+    "Liked Tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorisierte Tracks"
+          }
+        }
+      }
+    },
+    "Likes Shuffle": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Likes-Mix"
+          }
+        }
+      }
+    },
+    "Load more feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr Feed laden"
+          }
+        }
+      }
+    },
+    "Loaded %arg more Start tracks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg weitere Start-Tracks geladen."
+          }
+        }
+      }
+    },
+    "Loaded more playlists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Playlists geladen."
+          }
+        }
+      }
+    },
+    "Loading more…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere werden geladen …"
+          }
+        }
+      }
+    },
+    "Loading stream…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stream wird geladen …"
+          }
+        }
+      }
+    },
+    "Made For You": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für dich erstellt"
+          }
+        }
+      }
+    },
+    "Missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlt"
+          }
+        }
+      }
+    },
+    "Missing app configuration. Demo Mode can still be used without SoundCloud API.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Konfiguration fehlt. Der Demo-Modus kann weiterhin ohne SoundCloud-API verwendet werden."
+          }
+        }
+      }
+    },
+    "Missing app configuration. Fill .env values first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Konfiguration fehlt. Trage zuerst die Werte in .env ein."
+          }
+        }
+      }
+    },
+    "Missing Last.fm configuration.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Konfiguration fehlt."
+          }
+        }
+      }
+    },
+    "Mixed for you": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für dich gemischt"
+          }
+        }
+      }
+    },
+    "More for you": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr für dich"
+          }
+        }
+      }
+    },
+    "More from this artist": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr von diesem Artist"
+          }
+        }
+      }
+    },
+    "Move down": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach unten verschieben"
+          }
+        }
+      }
+    },
+    "Move up": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach oben verschieben"
+          }
+        }
+      }
+    },
+    "My Mix %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mein Mix %1$arg"
+          }
+        }
+      }
+    },
+    "My SoundCloud": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mein SoundCloud"
+          }
+        }
+      }
+    },
+    "Needs attention. Details explain the Last.fm error.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktion erforderlich. Unter Details wird der Last.fm-Fehler erklärt."
+          }
+        }
+      }
+    },
+    "Network": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Netzwerk"
+          }
+        }
+      }
+    },
+    "New SoundCloud tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue SoundCloud-Tracks"
+          }
+        }
+      }
+    },
+    "New tracks from %arg's Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Tracks aus dem Start von %1$arg"
+          }
+        }
+      }
+    },
+    "Next track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster Track"
+          }
+        }
+      }
+    },
+    "No customizations yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Anpassungen"
+          }
+        }
+      }
+    },
+    "No Last.fm events on this install yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf dieser Installation gibt es noch keine Last.fm-Ereignisse."
+          }
+        }
+      }
+    },
+    "No library content": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Inhalte in der Mediathek"
+          }
+        }
+      }
+    },
+    "No liked playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine favorisierten Playlists"
+          }
+        }
+      }
+    },
+    "No liked tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine favorisierten Tracks"
+          }
+        }
+      }
+    },
+    "No matching playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Playlists"
+          }
+        }
+      }
+    },
+    "No matching tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Tracks"
+          }
+        }
+      }
+    },
+    "No matching users": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Benutzer"
+          }
+        }
+      }
+    },
+    "No mix selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Mix ausgewählt"
+          }
+        }
+      }
+    },
+    "No new Start tracks on this page.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf dieser Seite gibt es keine neuen Start-Tracks."
+          }
+        }
+      }
+    },
+    "No playable tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine abspielbaren Tracks"
+          }
+        }
+      }
+    },
+    "No playback history yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Wiedergabeverlauf"
+          }
+        }
+      }
+    },
+    "No playlist selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Playlist ausgewählt"
+          }
+        }
+      }
+    },
+    "No playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Playlists"
+          }
+        }
+      }
+    },
+    "No stations yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Sender"
+          }
+        }
+      }
+    },
+    "No track loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Track geladen"
+          }
+        }
+      }
+    },
+    "Now Playing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft gerade"
+          }
+        }
+      }
+    },
+    "Now Playing and scrobbles are enabled.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "‚Now Playing‘ und Scrobbles sind aktiviert."
+          }
+        }
+      }
+    },
+    "Off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        }
+      }
+    },
+    "Off. Connect Last.fm to send Now Playing and scrobbles.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus. Verbinde Last.fm, um ‚Now Playing‘ und Scrobbles zu senden."
+          }
+        }
+      }
+    },
+    "Offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "Offline: cached data remains available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline: Gespeicherte Daten bleiben verfügbar."
+          }
+        }
+      }
+    },
+    "On": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An"
+          }
+        }
+      }
+    },
+    "One": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einen"
+          }
+        }
+      }
+    },
+    "Online": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
+          }
+        }
+      }
+    },
+    "Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen"
+          }
+        }
+      }
+    },
+    "Open %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg öffnen"
+          }
+        }
+      }
+    },
+    "Open %arg tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks von %1$arg öffnen"
+          }
+        }
+      }
+    },
+    "Open diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose öffnen"
+          }
+        }
+      }
+    },
+    "Open in SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In SoundCloud öffnen"
+          }
+        }
+      }
+    },
+    "Open player": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Player öffnen"
+          }
+        }
+      }
+    },
+    "Open settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Optional. Adds Now Playing, scrobble history and offline queue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Ergänzt ‚Now Playing‘, den Scrobble-Verlauf und eine Offline-Warteschlange."
+          }
+        }
+      }
+    },
+    "Overview": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersicht"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "Pending scrobbles": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausstehende Scrobbles"
+          }
+        }
+      }
+    },
+    "Personal feed, likes, playlists and playback are available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönlicher Feed, Likes, Playlists und Wiedergabe sind verfügbar."
+          }
+        }
+      }
+    },
+    "Personalization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalisierung"
+          }
+        }
+      }
+    },
+    "Personalized for %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalisiert für %@"
+          }
+        }
+      }
+    },
+    "Personalized for %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalisiert für %1$arg"
+          }
+        }
+      }
+    },
+    "Play": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abspielen"
+          }
+        }
+      }
+    },
+    "Play %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg abspielen"
+          }
+        }
+      }
+    },
+    "Play All": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle abspielen"
+          }
+        }
+      }
+    },
+    "Play Next": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes abspielen"
+          }
+        }
+      }
+    },
+    "Play playlist": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist abspielen"
+          }
+        }
+      }
+    },
+    "Playback": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe"
+          }
+        }
+      }
+    },
+    "Playback failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "Playback only": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Wiedergabe"
+          }
+        }
+      }
+    },
+    "Playback position": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeposition"
+          }
+        }
+      }
+    },
+    "Playback resolver unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeauflösung nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Playback stops restoring until SoundCloud is connected again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wiedergabe wird erst wiederhergestellt, wenn SoundCloud erneut verbunden ist."
+          }
+        }
+      }
+    },
+    "Player": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Player"
+          }
+        }
+      }
+    },
+    "Playing %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg wird abgespielt"
+          }
+        }
+      }
+    },
+    "Playing next: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg wird als Nächstes abgespielt"
+          }
+        }
+      }
+    },
+    "Playlist loading failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist konnte nicht geladen werden: %1$arg"
+          }
+        }
+      }
+    },
+    "Playlist playback failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist-Wiedergabe fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "Playlist Tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist-Tracks"
+          }
+        }
+      }
+    },
+    "Playlists": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlists"
+          }
+        }
+      }
+    },
+    "Playlists, likes and mixes": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlists, Likes und Mixe"
+          }
+        }
+      }
+    },
+    "Previous track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorheriger Track"
+          }
+        }
+      }
+    },
+    "Prioritizing %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg wird bevorzugt"
+          }
+        }
+      }
+    },
+    "Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil"
+          }
+        }
+      }
+    },
+    "Public": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffentlich"
+          }
+        }
+      }
+    },
+    "Public Mode can search and play public tracks, but it cannot access your likes, playlists, or profile.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im öffentlichen Modus kannst du öffentliche Tracks suchen und abspielen. Auf Likes, Playlists oder dein Profil kann er nicht zugreifen."
+          }
+        }
+      }
+    },
+    "Public Mode connection failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung im öffentlichen Modus fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "Public Mode has no private library. Use full SoundCloud login for this tab.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der öffentliche Modus hat keinen Zugriff auf deine private Mediathek. Verwende für diesen Tab den vollständigen SoundCloud-Login."
+          }
+        }
+      }
+    },
+    "Public Mode keeps Search and playback available, while Library stays locked until full SoundCloud login.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im öffentlichen Modus bleiben Suche und Wiedergabe verfügbar. Die Mediathek bleibt bis zum vollständigen SoundCloud-Login gesperrt."
+          }
+        }
+      }
+    },
+    "Public Profile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffentliches Profil"
+          }
+        }
+      }
+    },
+    "Public search and playback are available. Library needs full login.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffentliche Suche und Wiedergabe sind verfügbar. Die Mediathek benötigt den vollständigen Login."
+          }
+        }
+      }
+    },
+    "Public Start loading failed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der öffentliche Start konnte nicht geladen werden."
+          }
+        }
+      }
+    },
+    "Public Test Mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffentlicher Testmodus"
+          }
+        }
+      }
+    },
+    "Queue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warteschlange"
+          }
+        }
+      }
+    },
+    "Queue empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warteschlange leer"
+          }
+        }
+      }
+    },
+    "Queue is empty": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Warteschlange ist leer"
+          }
+        }
+      }
+    },
+    "Queue loading failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warteschlange konnte nicht geladen werden: %1$arg"
+          }
+        }
+      }
+    },
+    "Queued": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgemerkt"
+          }
+        }
+      }
+    },
+    "Queued scrobbles are kept locally and retried when Last.fm is reachable again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgemerkte Scrobbles bleiben lokal gespeichert und werden erneut gesendet, sobald Last.fm wieder erreichbar ist."
+          }
+        }
+      }
+    },
+    "Radio based on %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radio basierend auf %1$arg"
+          }
+        }
+      }
+    },
+    "Ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit"
+          }
+        }
+      }
+    },
+    "Ready to scrobble": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit zum Scrobbeln"
+          }
+        }
+      }
+    },
+    "Ready. Tracks scrobble after the listening threshold.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit. Tracks werden nach Erreichen der Hörschwelle gescrobbelt."
+          }
+        }
+      }
+    },
+    "Real playback, personal feed, likes, playlists and library.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echte Wiedergabe, persönlicher Feed, Likes, Playlists und Mediathek."
+          }
+        }
+      }
+    },
+    "Real public search and playback. Library stays locked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echte öffentliche Suche und Wiedergabe. Die Mediathek bleibt gesperrt."
+          }
+        }
+      }
+    },
+    "Recently Played": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt gespielt"
+          }
+        }
+      }
+    },
+    "Recently played track unavailable: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt gespielter Track nicht verfügbar: %1$arg"
+          }
+        }
+      }
+    },
+    "Reconnect": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu verbinden"
+          }
+        }
+      }
+    },
+    "Reconnect SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud neu verbinden"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        }
+      }
+    },
+    "Refresh library": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediathek aktualisieren"
+          }
+        }
+      }
+    },
+    "Refresh Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start aktualisieren"
+          }
+        }
+      }
+    },
+    "Refresh status": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status aktualisieren"
+          }
+        }
+      }
+    },
+    "Remove from queue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus der Warteschlange entfernen"
+          }
+        }
+      }
+    },
+    "Repeat": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederholen"
+          }
+        }
+      }
+    },
+    "Reset all connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Verbindungen zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset all connections?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Verbindungen zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset Last.fm": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset Last.fm connection?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last.fm-Verbindung zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset personalization": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalisierung zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset removes the correction and both exclusions. It cannot undo scrobbles already sent to Last.fm.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Zurücksetzen werden die Korrektur und beide Ausschlüsse entfernt. Bereits an Last.fm gesendete Scrobbles können nicht rückgängig gemacht werden."
+          }
+        }
+      }
+    },
+    "Reset SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset SoundCloud connection?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Verbindung zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Restore automatic metadata": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatische Metadaten wiederherstellen"
+          }
+        }
+      }
+    },
+    "Restore automatic scrobble settings?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatische Scrobble-Einstellungen wiederherstellen?"
+          }
+        }
+      }
+    },
+    "Restore automatic settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatische Einstellungen wiederherstellen"
+          }
+        }
+      }
+    },
+    "Restored playback. Loading the rest of the queue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe wiederhergestellt. Der Rest der Warteschlange wird geladen"
+          }
+        }
+      }
+    },
+    "Restored saved queue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Warteschlange wiederhergestellt"
+          }
+        }
+      }
+    },
+    "Retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Run search": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche starten"
+          }
+        }
+      }
+    },
+    "Sample catalog only. Connect SoundCloud for real streams.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Beispielkatalog. Verbinde SoundCloud für echte Streams."
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichern"
+          }
+        }
+      }
+    },
+    "Saved queue could not be restored: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Warteschlange konnte nicht wiederhergestellt werden: %1$arg"
+          }
+        }
+      }
+    },
+    "Scope": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereich"
+          }
+        }
+      }
+    },
+    "Scrobble error": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Fehler"
+          }
+        }
+      }
+    },
+    "Scrobble History": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Verlauf"
+          }
+        }
+      }
+    },
+    "Scrobble metadata saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Metadaten gespeichert"
+          }
+        }
+      }
+    },
+    "Scrobble OK": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble OK"
+          }
+        }
+      }
+    },
+    "Scrobble preferences reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Einstellungen zurückgesetzt"
+          }
+        }
+      }
+    },
+    "Scrobble settings reset for this track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Einstellungen für diesen Track zurückgesetzt"
+          }
+        }
+      }
+    },
+    "Scrobble this track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Track scrobbeln"
+          }
+        }
+      }
+    },
+    "Scrobbles": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbles"
+          }
+        }
+      }
+    },
+    "Scrobbles stay queued and are sent later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbles bleiben vorgemerkt und werden später gesendet."
+          }
+        }
+      }
+    },
+    "Scrobbling": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbling"
+          }
+        }
+      }
+    },
+    "Scrobbling disabled for this selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbling für diese Auswahl deaktiviert"
+          }
+        }
+      }
+    },
+    "Scrobbling is working": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbling funktioniert"
+          }
+        }
+      }
+    },
+    "Scrobbling off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobbling aus"
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche"
+          }
+        }
+      }
+    },
+    "Search artists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artists suchen"
+          }
+        }
+      }
+    },
+    "Search playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlists suchen"
+          }
+        }
+      }
+    },
+    "Search public tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffentliche Tracks suchen"
+          }
+        }
+      }
+    },
+    "Search SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud durchsuchen"
+          }
+        }
+      }
+    },
+    "Sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesendet"
+          }
+        }
+      }
+    },
+    "Set SoundCloud app config values and rebuild the app.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trage die SoundCloud-App-Konfiguration ein und erstelle die App neu."
+          }
+        }
+      }
+    },
+    "Set up CloudScrobble": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CloudScrobble einrichten"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen"
+          }
+        }
+      }
+    },
+    "Setup": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einrichtung"
+          }
+        }
+      }
+    },
+    "Show %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$arg anzeigen"
+          }
+        }
+      }
+    },
+    "Show %arg tracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks von %1$arg anzeigen"
+          }
+        }
+      }
+    },
+    "Show less like this": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weniger davon anzeigen"
+          }
+        }
+      }
+    },
+    "Show tracks in %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks in %1$arg anzeigen"
+          }
+        }
+      }
+    },
+    "Showing cached library. Connect SoundCloud to refresh.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die gespeicherte Mediathek wird angezeigt. Verbinde SoundCloud zum Aktualisieren."
+          }
+        }
+      }
+    },
+    "Showing cached Start. Connect SoundCloud to refresh.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gespeicherte Start wird angezeigt. Verbinde SoundCloud zum Aktualisieren."
+          }
+        }
+      }
+    },
+    "Showing less from %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weniger von %1$arg wird angezeigt"
+          }
+        }
+      }
+    },
+    "Showing partial Start. Could not refresh: %arg.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start wird teilweise angezeigt. Aktualisierung fehlgeschlagen: %1$arg."
+          }
+        }
+      }
+    },
+    "Shuffle": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zufallswiedergabe"
+          }
+        }
+      }
+    },
+    "Shuffle Feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feed-Mix"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungen"
+          }
+        }
+      }
+    },
+    "Skipped streams": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungene Streams"
+          }
+        }
+      }
+    },
+    "Skipped streams are SoundCloud items that did not provide a playable stream URL or stalled for too long.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungene Streams sind SoundCloud-Inhalte ohne abspielbare Stream-URL oder Inhalte, deren Laden zu lange gedauert hat."
+          }
+        }
+      }
+    },
+    "Sleep timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleeptimer"
+          }
+        }
+      }
+    },
+    "SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud"
+          }
+        }
+      }
+    },
+    "SoundCloud + Last.fm": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud + Last.fm"
+          }
+        }
+      }
+    },
+    "SoundCloud and Last.fm must be connected again afterwards.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud und Last.fm müssen anschließend erneut verbunden werden."
+          }
+        }
+      }
+    },
+    "SoundCloud authorization failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Autorisierung fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "SoundCloud callback failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Rückmeldung fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "SoundCloud config error: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Konfigurationsfehler: %1$arg"
+          }
+        }
+      }
+    },
+    "SoundCloud connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud verbunden"
+          }
+        }
+      }
+    },
+    "SoundCloud connected in Public Mode (no /me library).": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud im öffentlichen Modus verbunden (keine private Mediathek)."
+          }
+        }
+      }
+    },
+    "SoundCloud Home": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Start"
+          }
+        }
+      }
+    },
+    "SoundCloud login canceled.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Login abgebrochen."
+          }
+        }
+      }
+    },
+    "SoundCloud login failed: %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SoundCloud-Login fehlgeschlagen: %1$arg"
+          }
+        }
+      }
+    },
+    "Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        }
+      }
+    },
+    "Start a track from Search or Library.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starte einen Track über die Suche oder die Mediathek."
+          }
+        }
+      }
+    },
+    "Start feed fully loaded.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Start-Feed ist vollständig geladen."
+          }
+        }
+      }
+    },
+    "Start loading failed: %arg.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start konnte nicht geladen werden: %1$arg."
+          }
+        }
+      }
+    },
+    "Stations": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender"
+          }
+        }
+      }
+    },
+    "Step 1 of 2 · SoundCloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schritt 1 von 2 · SoundCloud"
+          }
+        }
+      }
+    },
+    "Step 2 of 2 · Last.fm is optional": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schritt 2 von 2 · Last.fm ist optional"
+          }
+        }
+      }
+    },
+    "The player stays quiet; see Diagnostics for details.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Player bleibt unaufdringlich; Details findest du in der Diagnose."
+          }
+        }
+      }
+    },
+    "The saved Last.fm session is removed. Pending scrobbles stay on this device.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die gespeicherte Last.fm-Sitzung wird entfernt. Ausstehende Scrobbles bleiben auf diesem Gerät."
+          }
+        }
+      }
+    },
+    "These values are saved for this SoundCloud track and used for future scrobbles.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Werte werden für diesen SoundCloud-Track gespeichert und für zukünftige Scrobbles verwendet."
+          }
+        }
+      }
+    },
+    "This only removes local diagnostics. It does not delete scrobbles from Last.fm.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dadurch werden nur lokale Diagnosedaten entfernt. Scrobbles bei Last.fm werden nicht gelöscht."
+          }
+        }
+      }
+    },
+    "Track actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track-Aktionen"
+          }
+        }
+      }
+    },
+    "Track hidden from Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track aus Start ausgeblendet"
+          }
+        }
+      }
+    },
+    "Track title": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracktitel"
+          }
+        }
+      }
+    },
+    "Tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks"
+          }
+        }
+      }
+    },
+    "Tracks, playlists, users": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks, Playlists, Benutzer"
+          }
+        }
+      }
+    },
+    "Try a broader search term.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versuche einen allgemeineren Suchbegriff."
+          }
+        }
+      }
+    },
+    "Try a different title, artist, or spelling.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versuche einen anderen Titel, Artist oder eine andere Schreibweise."
+          }
+        }
+      }
+    },
+    "Try another artist or username.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versuche einen anderen Artist oder Benutzernamen."
+          }
+        }
+      }
+    },
+    "Undo last personalization": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Personalisierung rückgängig machen"
+          }
+        }
+      }
+    },
+    "Until %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis %1$arg"
+          }
+        }
+      }
+    },
+    "Users": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzer"
+          }
+        }
+      }
+    },
+    "Weekly Wave": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weekly Wave"
+          }
+        }
+      }
+    },
+    "What is stored": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was gespeichert wird"
+          }
+        }
+      }
+    },
+    "What this means": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was das bedeutet"
+          }
+        }
+      }
+    },
+    "Wi-Fi": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WLAN"
+          }
+        }
+      }
+    },
+    "Worker": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Worker"
+          }
+        }
+      }
+    },
+    "You can hide tracks and boost or reduce artists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst Tracks ausblenden und Artists stärker oder schwächer gewichten."
+          }
+        }
+      }
+    },
+    "Your metadata correction and exclusions for this track will be removed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Metadatenkorrektur und die Ausschlüsse für diesen Track werden entfernt."
+          }
+        }
+      }
+    },
+    "Your Mix %arg": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Mix %1$arg"
+          }
+        }
+      }
+    },
+    "Your password is only sent to the token broker to obtain a Last.fm session key. The app then stores only that session key in the Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Passwort wird nur an den Token-Broker gesendet, um einen Last.fm-Sitzungsschlüssel zu erhalten. Anschließend speichert die App nur diesen Schlüssel im Schlüsselbund."
+          }
+        }
+      }
+    },
+    "Your Playlists": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Playlists"
+          }
+        }
+      }
+    },
+    "%@ Station": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender von %@"
+          }
+        }
+      }
+    },
+    "%@ minutes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Minuten"
+          }
+        }
+      }
+    },
+    "%@ of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ von %2$@"
+          }
+        }
+      }
+    },
+    "%lld artists rated · %lld tracks hidden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld Artists bewertet · %2$lld Tracks ausgeblendet"
+          }
+        }
+      }
+    },
+    "%lld minutes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Minuten"
+          }
+        }
+      }
+    },
+    "%lld tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks"
+          }
+        }
+      }
+    },
+    "%lld tracks from Last.fm, likes, playlists, and Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks aus Last.fm, Likes, Playlists und Start"
+          }
+        }
+      }
+    },
+    "%lld tracks from scrobbles and top artists": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks aus Scrobbles und Top-Artists"
+          }
+        }
+      }
+    },
+    "%lld tracks from your SoundCloud library": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks aus deiner SoundCloud-Mediathek"
+          }
+        }
+      }
+    },
+    "%lld tracks from your feed and follows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks aus deinem Feed und deinen Followings"
+          }
+        }
+      }
+    },
+    "%lld tracks from your likes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks aus deinen Likes"
+          }
+        }
+      }
+    },
+    "%lld tracks tuned from your library": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks, abgestimmt auf deine Mediathek"
+          }
+        }
+      }
+    },
+    "%lld tracks weighted by Last.fm, likes, and Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks, gewichtet nach Last.fm, Likes und Start"
+          }
+        }
+      }
+    },
+    "%lld tracks weighted heavily by Last.fm and likes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tracks, stark nach Last.fm und Likes gewichtet"
+          }
+        }
+      }
+    },
+    "%lld unplayable tracks skipped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld nicht abspielbare Tracks übersprungen"
+          }
+        }
+      }
+    },
+    "Loaded %lld more Start tracks.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld weitere Start-Tracks geladen."
+          }
+        }
+      }
+    },
+    "My Mix %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mein Mix %lld"
+          }
+        }
+      }
+    },
+    "New tracks from %@'s Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Tracks aus dem Start von %@"
+          }
+        }
+      }
+    },
+    "Open %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ öffnen"
+          }
+        }
+      }
+    },
+    "Open %@ tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks von %@ öffnen"
+          }
+        }
+      }
+    },
+    "Play %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ abspielen"
+          }
+        }
+      }
+    },
+    "Playlist loading failed: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playlist konnte nicht geladen werden: %@"
+          }
+        }
+      }
+    },
+    "Prioritizing %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird bevorzugt"
+          }
+        }
+      }
+    },
+    "Radio based on %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radio basierend auf %@"
+          }
+        }
+      }
+    },
+    "Show %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ anzeigen"
+          }
+        }
+      }
+    },
+    "Show %@ tracks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks von %@ anzeigen"
+          }
+        }
+      }
+    },
+    "Show tracks in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks in %@ anzeigen"
+          }
+        }
+      }
+    },
+    "Showing less from %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weniger von %@ wird angezeigt"
+          }
+        }
+      }
+    },
+    "Showing partial Start. Could not refresh: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start wird teilweise angezeigt. Aktualisierung fehlgeschlagen: %@."
+          }
+        }
+      }
+    },
+    "Start loading failed: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start konnte nicht geladen werden: %@."
+          }
+        }
+      }
+    },
+    "Until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis %@"
+          }
+        }
+      }
+    },
+    "Your Mix %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Mix %lld"
+          }
+        }
+      }
+    },
+    "Reset all scrobble corrections?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Scrobble-Korrekturen zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset scrobble corrections": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrobble-Korrekturen zurücksetzen"
+          }
+        }
+      }
+    },
+    "Saved metadata edits and track or artist exclusions will be removed. Existing Last.fm scrobbles are not changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Metadatenänderungen sowie Track- oder Artist-Ausschlüsse werden entfernt. Bestehende Last.fm-Scrobbles bleiben unverändert."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.2"
 }

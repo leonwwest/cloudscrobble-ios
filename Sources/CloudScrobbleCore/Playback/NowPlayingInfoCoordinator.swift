@@ -25,6 +25,12 @@ final class NowPlayingInfoCoordinator {
     private var artwork: MPMediaItemArtwork?
 #endif
 
+    deinit {
+#if os(iOS) && canImport(MediaPlayer) && canImport(UIKit)
+        artworkTask?.cancel()
+#endif
+    }
+
     func update(for item: QueueItem, elapsedSeconds: TimeInterval, playbackRate: Double) {
 #if os(iOS) && canImport(MediaPlayer)
         prepareArtwork(for: item)
@@ -72,28 +78,22 @@ final class NowPlayingInfoCoordinator {
         guard let artworkURL = item.artworkURL else { return }
 
         artworkTask = Task { [weak self, trackURN = item.trackURN, artworkURL] in
-            do {
-                let (data, response) = try await URLSession.shared.data(from: artworkURL)
-                guard !Task.isCancelled,
-                      (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
-                      let image = UIImage(data: data) else {
-                    return
-                }
-
-                let artwork = Self.makeArtwork(from: image)
-                await MainActor.run { [weak self] in
-                    guard let self,
-                          self.artworkTrackURN == trackURN,
-                          self.artworkURL == artworkURL else {
-                        return
-                    }
-
-                    self.artwork = artwork
-                    self.refreshHandler?()
-                }
-            } catch {
-                // Artwork is cosmetic; playback should continue if loading fails.
+            guard let loaded = await ArtworkImagePipeline.shared.image(
+                for: artworkURL,
+                maxPixelSize: 512
+            ), !Task.isCancelled else {
+                return
             }
+
+            let artwork = Self.makeArtwork(from: loaded.image)
+            guard let self,
+                  self.artworkTrackURN == trackURN,
+                  self.artworkURL == artworkURL else {
+                return
+            }
+
+            self.artwork = artwork
+            self.refreshHandler?()
         }
 #endif
     }

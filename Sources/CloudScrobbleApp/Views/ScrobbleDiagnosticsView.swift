@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ScrobbleDiagnosticsView: View {
     @ObservedObject var controller: PlayerScrobbleController
+    @State private var showClearHistoryConfirmation = false
 
     var onRefresh: (() -> Void)?
 
@@ -36,6 +37,18 @@ struct ScrobbleDiagnosticsView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .confirmationDialog(
+            "Clear scrobble history?",
+            isPresented: $showClearHistoryConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear history", role: .destructive) {
+                controller.clearScrobbleHistory()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This only removes local diagnostics. It does not delete scrobbles from Last.fm.")
+        }
     }
 
     private var summarySection: some View {
@@ -43,6 +56,7 @@ struct ScrobbleDiagnosticsView: View {
             Label("Last.fm Status", systemImage: "dot.radiowaves.left.and.right")
                 .font(.system(.headline, design: .rounded).weight(.black))
                 .foregroundStyle(CloudTheme.ink)
+                .accessibilityIdentifier("diagnostics-lastfm-status-title")
 
             DiagnosticsInfoRow(title: "Current status", value: controller.debugStatus.isEmpty ? "Ready" : controller.debugStatus)
             DiagnosticsInfoRow(title: "Pending scrobbles", value: "\(controller.pendingScrobbleCount)")
@@ -58,7 +72,9 @@ struct ScrobbleDiagnosticsView: View {
             if controller.skippedUnplayableCount > 0 {
                 DiagnosticsInfoRow(
                     title: "Skipped streams",
-                    value: "\(controller.skippedUnplayableCount) unplayable track\(controller.skippedUnplayableCount == 1 ? "" : "s") skipped",
+                    value: controller.skippedUnplayableCount == 1
+                        ? String(localized: "1 unplayable track skipped")
+                        : String(localized: "\(controller.skippedUnplayableCount) unplayable tracks skipped"),
                     isWarning: true
                 )
             }
@@ -72,12 +88,13 @@ struct ScrobbleDiagnosticsView: View {
                 Label("Scrobble History", systemImage: "list.bullet.clipboard")
                     .font(.system(.headline, design: .rounded).weight(.black))
                     .foregroundStyle(CloudTheme.ink)
+                    .accessibilityIdentifier("diagnostics-scrobble-history-title")
 
                 Spacer()
 
                 if !controller.scrobbleHistory.isEmpty {
                     Button {
-                        controller.clearScrobbleHistory()
+                        showClearHistoryConfirmation = true
                     } label: {
                         Image(systemName: "xmark")
                     }
@@ -138,12 +155,12 @@ private struct DiagnosticsInfoRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.caption2, design: .rounded).weight(.bold))
                 .foregroundStyle(CloudTheme.muted)
                 .textCase(.uppercase)
 
-            Text(value)
+            Text(LocalizedStringKey(value))
                 .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(isWarning ? CloudTheme.warning : CloudTheme.ink)
                 .lineLimit(4)
@@ -196,15 +213,15 @@ private struct DiagnosticsHistoryRow: View {
     private var eventTitle: String {
         switch entry.event {
         case .nowPlaying:
-            return "Now Playing"
+            return String(localized: "Now Playing")
         case .scrobbled:
-            return "Sent"
+            return String(localized: "Sent")
         case .queued:
-            return "Queued"
+            return String(localized: "Queued")
         case .failed:
-            return "Failed"
+            return String(localized: "Failed")
         case .skipped:
-            return "Skipped"
+            return String(localized: "Skipped")
         }
     }
 

@@ -25,16 +25,27 @@ describe("broker router (unstable_dev)", () => {
   it("responds to GET /healthz without an API key", async () => {
     const response = await worker.fetch("/healthz");
     expect(response.status).toBe(200);
-    const body = await response.json() as { status: string; appAPIKeyConfigured: boolean };
+    const body = await response.json() as {
+      status: string;
+      ready: boolean;
+      appAPIKeyConfigured: boolean;
+      security: { appAPIKeyRequired: boolean; upstreamTimeoutMs: number };
+      rateLimit: { enabled: boolean; bindingConfigured: boolean };
+    };
     expect(body.status).toBe("ok");
+    expect(body.ready).toBe(true);
     expect(body.appAPIKeyConfigured).toBe(true);
+    expect(body.security.appAPIKeyRequired).toBe(true);
+    expect(body.security.upstreamTimeoutMs).toBe(10_000);
+    expect(body.rateLimit.enabled).toBe(false);
+    expect(body.rateLimit.bindingConfigured).toBe(false);
   });
 
   it("responds to GET /version without an API key", async () => {
     const response = await worker.fetch("/version");
     expect(response.status).toBe(200);
     const body = await response.json() as { version: string };
-    expect(body.version).toBe("2026.06.13.1");
+    expect(body.version).toBe("2026.07.10.1");
   });
 
   it("rejects protected routes without X-API-Key with 401", async () => {

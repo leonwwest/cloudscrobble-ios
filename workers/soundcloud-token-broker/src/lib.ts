@@ -12,8 +12,11 @@ export interface Env {
   ALLOWED_ORIGIN?: string;
   RATE_LIMIT_PER_MINUTE?: string;
   RATE_LIMIT_WINDOW_SECONDS?: string;
+  RATE_LIMIT_FAIL_CLOSED?: string;
+  REQUIRE_APP_API_KEY?: string;
+  UPSTREAM_TIMEOUT_MS?: string;
   // Shared secret gating all non-public routes. Set via `wrangler secret put APP_API_KEY`.
-  // When unset, the gate is disabled (local dev / smoke); production must set it.
+  // When unset, routes fail closed unless local smoke explicitly opts out.
   APP_API_KEY?: string;
   // Optional KV namespace binding. When bound, enables per-fingerprint rate limiting.
   // KV is eventually consistent, so this is defense-in-depth behind the API-key gate.
@@ -41,7 +44,7 @@ export interface RateLimitConfig {
 
 export type RateLimitResult =
   | { ok: true }
-  | { ok: false; retryAfterSeconds: number };
+  | { ok: false; reason: "limited" | "unavailable"; retryAfterSeconds: number };
 
 export type AppAPIKeyResult = { ok: true } | { ok: false };
 
@@ -108,6 +111,44 @@ export function loadRateLimitConfig(env: Env): RateLimitConfig {
     maxRequests: parsePositiveInt(env.RATE_LIMIT_PER_MINUTE, 90),
     windowSeconds: parsePositiveInt(env.RATE_LIMIT_WINDOW_SECONDS, 60)
   };
+}
+
+export function loadBoolean(raw: string | undefined, fallback: boolean): boolean {
+  if (!raw) {
+    return fallback;
+  }
+
+  switch (raw.trim().toLowerCase()) {
+    case "1":
+    case "true":
+    case "yes":
+    case "on":
+      return true;
+    case "0":
+    case "false":
+    case "no":
+    case "off":
+      return false;
+    default:
+      return fallback;
+  }
+}
+
+export function isAppAPIKeyRequired(env: Env): boolean {
+  return loadBoolean(env.REQUIRE_APP_API_KEY, true);
+}
+
+export function isRateLimitFailClosed(env: Env): boolean {
+  return loadBoolean(env.RATE_LIMIT_FAIL_CLOSED, true);
+}
+
+export function loadUpstreamTimeoutMs(env: Env): number {
+  const fallback = 10_000;
+  const parsed = Number.parseInt(env.UPSTREAM_TIMEOUT_MS || "", 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(30_000, Math.max(1_000, parsed));
 }
 
 export function parsePositiveInt(raw: string | undefined, fallback: number): number {
@@ -213,8 +254,9 @@ export function normalizeTopArtists(value: unknown): LastFMTasteArtist[] {
 export function requireAppAPIKey(request: Request, env: Env): AppAPIKeyResult {
   const expected = env.APP_API_KEY;
   if (!expected) {
-    // Secret not configured (local dev / smoke). Gate is disabled.
-    return { ok: true };
+    // Production-safe default: a missing secret keeps protected routes closed.
+    // Local smoke environments can explicitly set REQUIRE_APP_API_KEY=false.
+    return { ok: !isAppAPIKeyRequired(env) };
   }
   const provided = request.headers.get(APP_API_KEY_HEADER);
   if (!provided || provided !== expected) {

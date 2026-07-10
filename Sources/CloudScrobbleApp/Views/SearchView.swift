@@ -5,7 +5,7 @@ import UIKit
 #endif
 
 struct SearchView: View {
-    @StateObject var viewModel: SearchViewModel
+    @ObservedObject var viewModel: SearchViewModel
 
     var body: some View {
         ScrollView {
@@ -13,9 +13,18 @@ struct SearchView: View {
                 controlCard
 
                 if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage)
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CloudTheme.warning)
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(CloudTheme.warning)
+                        Text(LocalizedStringKey(errorMessage))
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(CloudTheme.warning)
+                        Spacer(minLength: 4)
+                        Button("Retry") {
+                            Task { await viewModel.runSearch(reset: true) }
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+                    }
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
@@ -105,6 +114,7 @@ struct SearchView: View {
                     Image(systemName: "arrow.forward")
                 }
                 .buttonStyle(IconCircleButtonStyle())
+                .accessibilityLabel("Run search")
             }
 
             HStack(spacing: 10) {
@@ -142,7 +152,7 @@ struct SearchView: View {
 
             Picker("Scope", selection: $viewModel.scope) {
                 ForEach(SearchViewModel.Scope.allCases) { scope in
-                    Text(scope.rawValue).tag(scope)
+                    Text(LocalizedStringKey(scope.rawValue)).tag(scope)
                 }
             }
             .pickerStyle(.segmented)
@@ -159,8 +169,10 @@ struct SearchView: View {
             } else if viewModel.tracks.isEmpty {
                 EmptyStateCard(
                     icon: "waveform.badge.magnifyingglass",
-                    title: "No tracks yet",
-                    subtitle: "Start with a search term and run search."
+                    title: viewModel.hasPerformedSearch ? "No matching tracks" : "Search SoundCloud",
+                    subtitle: viewModel.hasPerformedSearch
+                        ? "Try a different title, artist, or spelling."
+                        : "Enter a track or artist above to get started."
                 )
             } else {
                 LazyVStack(spacing: 10) {
@@ -176,6 +188,11 @@ struct SearchView: View {
                             await viewModel.loadMoreIfNeeded(currentItemID: track.id)
                         }
                     }
+                    if viewModel.isLoadingNextPage {
+                        ProgressView()
+                            .tint(CloudTheme.sky)
+                            .padding(.vertical, 8)
+                    }
                 }
             }
         case .playlists:
@@ -184,8 +201,10 @@ struct SearchView: View {
             } else if viewModel.playlists.isEmpty {
                 EmptyStateCard(
                     icon: "music.note.list",
-                    title: "No playlists yet",
-                    subtitle: "Search for playlists and open one to play its tracks."
+                    title: viewModel.hasPerformedSearch ? "No matching playlists" : "Search playlists",
+                    subtitle: viewModel.hasPerformedSearch
+                        ? "Try a broader search term."
+                        : "Enter a name above and open a playlist to play it."
                 )
             } else {
                 LazyVStack(spacing: 10) {
@@ -197,6 +216,11 @@ struct SearchView: View {
                             await viewModel.loadMoreIfNeeded(currentItemID: playlist.id)
                         }
                     }
+                    if viewModel.isLoadingNextPage {
+                        ProgressView()
+                            .tint(CloudTheme.sky)
+                            .padding(.vertical, 8)
+                    }
                 }
             }
         case .users:
@@ -205,8 +229,10 @@ struct SearchView: View {
             } else if viewModel.users.isEmpty {
                 EmptyStateCard(
                     icon: "person.2.crop.square.stack",
-                    title: "No users yet",
-                    subtitle: "Search for artists and open a profile."
+                    title: viewModel.hasPerformedSearch ? "No matching users" : "Search artists",
+                    subtitle: viewModel.hasPerformedSearch
+                        ? "Try another artist or username."
+                        : "Enter an artist or username and open the profile."
                 )
             } else {
                 LazyVStack(spacing: 10) {
@@ -217,6 +243,11 @@ struct SearchView: View {
                         .task {
                             await viewModel.loadMoreIfNeeded(currentItemID: user.id)
                         }
+                    }
+                    if viewModel.isLoadingNextPage {
+                        ProgressView()
+                            .tint(CloudTheme.sky)
+                            .padding(.vertical, 8)
                     }
                 }
             }
@@ -295,6 +326,7 @@ private struct TrackResultCard: View {
                     .background(Circle().fill(CloudTheme.sky))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Play \(displayMetadata.track)")
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -460,7 +492,6 @@ private struct UserProfileSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -500,6 +531,5 @@ private struct PlaylistTracksSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }

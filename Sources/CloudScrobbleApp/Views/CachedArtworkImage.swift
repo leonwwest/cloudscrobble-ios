@@ -1,5 +1,5 @@
+import CloudScrobbleCore
 import Foundation
-import ImageIO
 import SwiftUI
 
 #if os(iOS)
@@ -10,32 +10,13 @@ import AppKit
 private typealias PlatformArtworkImage = NSImage
 #endif
 
-@MainActor
-private final class ArtworkMemoryCache {
-    static let shared = ArtworkMemoryCache()
-
-    private let cache = NSCache<NSURL, PlatformArtworkImage>()
-
-    private init() {
-        cache.countLimit = 360
-    }
-
-    func image(for url: URL) -> PlatformArtworkImage? {
-        cache.object(forKey: url as NSURL)
-    }
-
-    func insert(_ image: PlatformArtworkImage, for url: URL) {
-        cache.setObject(image, forKey: url as NSURL)
-    }
-}
-
 struct CachedArtworkImage: View {
     let url: URL?
     let iconName: String
-    var maxPixelSize: CGFloat = 520
+    var maxPixelSize: CGFloat = 512
 
     @State private var image: PlatformArtworkImage?
-    @State private var loadedURL: URL?
+    @State private var loadedRequestID: String?
 
     var body: some View {
         ZStack {
@@ -54,7 +35,7 @@ struct CachedArtworkImage: View {
             }
         }
         .clipped()
-        .task(id: url) {
+        .task(id: requestID) {
             await loadImage()
         }
     }
@@ -69,61 +50,28 @@ struct CachedArtworkImage: View {
 
     @MainActor
     private func loadImage() async {
-        guard let url else {
+        guard let url, let requestID else {
             image = nil
-            loadedURL = nil
+            loadedRequestID = nil
             return
         }
 
-        if loadedURL == url, image != nil {
+        if loadedRequestID == requestID, image != nil {
             return
         }
 
-        if let cached = ArtworkMemoryCache.shared.image(for: url) {
-            image = cached
-            loadedURL = url
-            return
-        }
-
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
-                return
-            }
-            guard let decoded = Self.downsample(data: data, maxPixelSize: maxPixelSize) else {
-                return
-            }
-            ArtworkMemoryCache.shared.insert(decoded, for: url)
-            image = decoded
-            loadedURL = url
-        } catch {
-            if loadedURL != url {
-                image = nil
-            }
-        }
+        image = nil
+        let loaded = await ArtworkImagePipeline.shared.image(
+            for: url,
+            maxPixelSize: maxPixelSize
+        )
+        guard !Task.isCancelled, self.requestID == requestID else { return }
+        image = loaded?.image
+        loadedRequestID = loaded == nil ? nil : requestID
     }
 
-    private static func downsample(data: Data, maxPixelSize: CGFloat) -> PlatformArtworkImage? {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
-            return nil
-        }
-
-        let thumbnailOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maxPixelSize)
-        ] as CFDictionary
-
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
-            return nil
-        }
-
-#if os(iOS)
-        return UIImage(cgImage: cgImage)
-#elseif os(macOS)
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-#endif
+    private var requestID: String? {
+        guard let url else { return nil }
+        return "\(url.absoluteString)#px=\(Int(ceil(maxPixelSize)))"
     }
 }

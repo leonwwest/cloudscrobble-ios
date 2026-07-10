@@ -14,6 +14,8 @@ final class SearchViewModel: ObservableObject {
     @Published var query = ""
     @Published var scope: Scope = .tracks
     @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingNextPage = false
+    @Published private(set) var hasPerformedSearch = false
     @Published private(set) var errorMessage: String?
 
     @Published private(set) var tracks: [SCTrack] = []
@@ -27,6 +29,7 @@ final class SearchViewModel: ObservableObject {
     private var playlistsNextHref: URL?
     private var usersNextHref: URL?
     private var searchTask: Task<Void, Never>?
+    private var searchGeneration = UUID()
 
     private weak var session: AppSessionViewModel?
 
@@ -46,6 +49,9 @@ final class SearchViewModel: ObservableObject {
 
     func scheduleSearch(immediate: Bool = false) {
         searchTask?.cancel()
+        searchGeneration = UUID()
+        isLoading = false
+        isLoadingNextPage = false
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -54,7 +60,11 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
-        guard trimmed.count >= 2 else { return }
+        guard trimmed.count >= 2 else {
+            clearResults()
+            errorMessage = nil
+            return
+        }
 
         let delay: UInt64 = immediate ? 0 : 420_000_000
         searchTask = Task { [weak self] in
@@ -68,12 +78,12 @@ final class SearchViewModel: ObservableObject {
 
     func runSearch(reset: Bool = true) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
         guard let api = session.apiClient else {
-            errorMessage = "Connect SoundCloud first"
+            errorMessage = String(localized: "Connect SoundCloud first")
             return
         }
 
@@ -83,18 +93,38 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
+        let requestedScope = scope
+        let generation: UUID
+        if reset {
+            generation = UUID()
+            searchGeneration = generation
+            hasPerformedSearch = true
+            isLoading = true
+        } else {
+            generation = searchGeneration
+            guard !isLoadingNextPage else { return }
+            isLoadingNextPage = true
+        }
+        defer {
+            if searchGeneration == generation {
+                if reset {
+                    isLoading = false
+                } else {
+                    isLoadingNextPage = false
+                }
+            }
+        }
 
         do {
-            switch scope {
+            switch requestedScope {
             case .tracks:
                 let page = try await api.searchTracks(
                     query: trimmed,
                     limit: 25,
                     nextHref: reset ? nil : tracksNextHref
                 )
-                tracks = reset ? page.collection : tracks + page.collection
+                guard requestIsCurrent(query: trimmed, scope: requestedScope, generation: generation) else { return }
+                tracks = reset ? page.collection : Self.uniqueByID(tracks + page.collection)
                 tracksNextHref = page.nextHref
             case .playlists:
                 let page = try await api.searchPlaylists(
@@ -102,7 +132,8 @@ final class SearchViewModel: ObservableObject {
                     limit: 25,
                     nextHref: reset ? nil : playlistsNextHref
                 )
-                playlists = reset ? page.collection : playlists + page.collection
+                guard requestIsCurrent(query: trimmed, scope: requestedScope, generation: generation) else { return }
+                playlists = reset ? page.collection : Self.uniqueByID(playlists + page.collection)
                 playlistsNextHref = page.nextHref
             case .users:
                 let page = try await api.searchUsers(
@@ -110,17 +141,22 @@ final class SearchViewModel: ObservableObject {
                     limit: 25,
                     nextHref: reset ? nil : usersNextHref
                 )
-                users = reset ? page.collection : users + page.collection
+                guard requestIsCurrent(query: trimmed, scope: requestedScope, generation: generation) else { return }
+                users = reset ? page.collection : Self.uniqueByID(users + page.collection)
                 usersNextHref = page.nextHref
             }
 
+            guard requestIsCurrent(query: trimmed, scope: requestedScope, generation: generation) else { return }
             errorMessage = nil
         } catch {
+            guard !Task.isCancelled,
+                  requestIsCurrent(query: trimmed, scope: requestedScope, generation: generation) else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     func loadMoreIfNeeded(currentItemID: String) async {
+        guard !isLoading, !isLoadingNextPage else { return }
         switch scope {
         case .tracks:
             guard tracks.last?.id == currentItemID, tracksNextHref != nil else { return }
@@ -135,7 +171,7 @@ final class SearchViewModel: ObservableObject {
 
     func play(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -150,7 +186,7 @@ final class SearchViewModel: ObservableObject {
 
     func playNext(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -159,7 +195,7 @@ final class SearchViewModel: ObservableObject {
 
     func addToQueue(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -182,7 +218,7 @@ final class SearchViewModel: ObservableObject {
 
     func playSelectedPlaylist() async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -191,7 +227,7 @@ final class SearchViewModel: ObservableObject {
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -254,5 +290,18 @@ final class SearchViewModel: ObservableObject {
         tracksNextHref = nil
         playlistsNextHref = nil
         usersNextHref = nil
+        hasPerformedSearch = false
+        isLoadingNextPage = false
+    }
+
+    private func requestIsCurrent(query requestedQuery: String, scope requestedScope: Scope, generation: UUID) -> Bool {
+        searchGeneration == generation
+            && scope == requestedScope
+            && query.trimmingCharacters(in: .whitespacesAndNewlines) == requestedQuery
+    }
+
+    private static func uniqueByID<T: Identifiable>(_ values: [T]) -> [T] where T.ID: Hashable {
+        var seen = Set<T.ID>()
+        return values.filter { seen.insert($0.id).inserted }
     }
 }

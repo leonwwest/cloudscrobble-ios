@@ -46,13 +46,12 @@ Set these in the project-root `.env` before running the app target:
 export SOUNDCLOUD_CLIENT_ID="..."
 export SOUNDCLOUD_REDIRECT_URI="cloudscrobble://oauth"
 export SOUNDCLOUD_TOKEN_BROKER_BASE_URL="https://broker.example"
-export LASTFM_API_KEY="..."
-export LASTFM_API_SECRET="..."
+export CS_APP_API_KEY="..."
 ```
 
-`SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is optional for current app builds. If it is missing, invalid, or points at a private/local address, the app falls back to the deployed Worker URL above.
+`SOUNDCLOUD_TOKEN_BROKER_BASE_URL` is optional for current app builds. Release builds accept only HTTPS. Debug builds additionally allow HTTP for localhost and private-network brokers; other invalid or insecure values fall back to the deployed Worker URL above.
 
-Do not put `SOUNDCLOUD_CLIENT_SECRET` in the app `.env` or Xcode scheme. It belongs only in Cloudflare Worker secrets or `backend/.env`, because the iOS app talks to the token broker instead of sending the SoundCloud secret from the app.
+Do not put `SOUNDCLOUD_CLIENT_SECRET`, `LASTFM_API_KEY`, or `LASTFM_API_SECRET` in the app `.env` or Xcode scheme. They belong only in Cloudflare Worker secrets or `backend/.env`, because the iOS app talks to the token broker instead of sending upstream credentials from the app.
 
 ## Token broker roles
 - Production path: `workers/soundcloud-token-broker` on Cloudflare Workers.
@@ -72,6 +71,7 @@ go run .
 swift test
 cd backend && go test ./...
 cd workers/soundcloud-token-broker && npm run check
+cd workers/soundcloud-token-broker && npm test
 ```
 
 Optional live integration tests:

@@ -8,6 +8,9 @@ import {
   loadConfig,
   loadLastFMConfig,
   loadRateLimitConfig,
+  loadUpstreamTimeoutMs,
+  isAppAPIKeyRequired,
+  isRateLimitFailClosed,
   signLastFM,
   clampLimit,
   readRecord,
@@ -17,7 +20,6 @@ import {
   isLastFMError,
   normalizeRecentTracks,
   normalizeTopArtists,
-  isValidHTTPURL,
   requireAppAPIKey,
   rateLimitKey
 } from "./lib";
@@ -70,7 +72,7 @@ type RequestWithCF = Request & {
   };
 };
 
-const VERSION = "2026.06.13.1";
+const VERSION = "2026.07.10.1";
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 const MAX_UPSTREAM_JSON_BYTES = 2 * 1024 * 1024;
 
@@ -84,21 +86,39 @@ export default {
     try {
       if (request.method === "OPTIONS") {
         response = new Response(null, { status: 204 });
+      } else if (isPublicRoute(request, url)) {
+        response = await routeRequest(request, env, url);
       } else {
-        const rateLimit = await checkRateLimit(request, env, url);
-        if (!rateLimit.ok) {
-          response = json(
-            {
-              error: "rate_limited",
-              message: "Too many requests. Try again shortly."
-            },
-            429,
-            {
-              "Retry-After": String(rateLimit.retryAfterSeconds)
-            }
-          );
+        const keyCheck = requireAppAPIKey(request, env);
+        if (!keyCheck.ok) {
+          response = json({ error: "unauthorized_api_key", message: "Missing or invalid API key." }, 401);
         } else {
-          response = await routeRequest(request, env, url);
+          const rateLimit = await checkRateLimit(request, env, url);
+          if (!rateLimit.ok && rateLimit.reason === "limited") {
+            response = json(
+              {
+                error: "rate_limited",
+                message: "Too many requests. Try again shortly."
+              },
+              429,
+              {
+                "Retry-After": String(rateLimit.retryAfterSeconds)
+              }
+            );
+          } else if (!rateLimit.ok) {
+            response = json(
+              {
+                error: "rate_limit_unavailable",
+                message: "Request protection is temporarily unavailable."
+              },
+              503,
+              {
+                "Retry-After": String(rateLimit.retryAfterSeconds)
+              }
+            );
+          } else {
+            response = await routeRequest(request, env, url);
+          }
         }
       }
     } catch (error) {
@@ -114,15 +134,39 @@ export default {
 
 async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === "/healthz" && request.method === "GET") {
+    const soundCloudConfigured = Boolean(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET);
+    const lastFMConfigured = Boolean(env.LASTFM_API_KEY && env.LASTFM_API_SECRET);
+    const appAPIKeyRequired = isAppAPIKeyRequired(env);
+    const appAPIKeyConfigured = Boolean(env.APP_API_KEY);
+    const rateLimitConfig = loadRateLimitConfig(env);
+    const rateLimitRequested = rateLimitConfig.maxRequests > 0 && rateLimitConfig.windowSeconds > 0;
+    const rateLimitBindingConfigured = Boolean(env.RATE_LIMIT);
+    const ready = soundCloudConfigured
+      && lastFMConfigured
+      && (!appAPIKeyRequired || appAPIKeyConfigured);
+
     return json({
-      status: "ok",
+      status: ready ? "ok" : "degraded",
+      ready,
       version: VERSION,
       services: {
-        soundcloud: Boolean(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET),
-        lastfm: Boolean(env.LASTFM_API_KEY && env.LASTFM_API_SECRET)
+        soundcloud: soundCloudConfigured,
+        lastfm: lastFMConfigured
       },
-      rateLimit: loadRateLimitConfig(env),
-      appAPIKeyConfigured: Boolean(env.APP_API_KEY)
+      security: {
+        appAPIKeyRequired,
+        appAPIKeyConfigured,
+        rateLimitFailClosed: isRateLimitFailClosed(env),
+        upstreamTimeoutMs: loadUpstreamTimeoutMs(env)
+      },
+      rateLimit: {
+        ...rateLimitConfig,
+        requested: rateLimitRequested,
+        enabled: rateLimitRequested && rateLimitBindingConfigured,
+        bindingConfigured: rateLimitBindingConfigured
+      },
+      // Kept for backwards-compatible lightweight smoke checks.
+      appAPIKeyConfigured
     });
   }
 
@@ -130,40 +174,39 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     return json({ version: VERSION });
   }
 
-  const keyCheck = requireAppAPIKey(request, env);
-  if (!keyCheck.ok) {
-    return json({ error: "unauthorized_api_key", message: "Missing or invalid API key." }, 401);
+  if (url.pathname === "/oauth/soundcloud/exchange") {
+    return handleExchange(request, env);
   }
 
-  if (url.pathname === "/oauth/soundcloud/exchange") {
-      return handleExchange(request, env);
-    }
+  if (url.pathname === "/oauth/soundcloud/refresh") {
+    return handleRefresh(request, env);
+  }
 
-    if (url.pathname === "/oauth/soundcloud/refresh") {
-      return handleRefresh(request, env);
-    }
+  if (url.pathname === "/oauth/soundcloud/client-credentials") {
+    return handleClientCredentials(request, env);
+  }
 
-    if (url.pathname === "/oauth/soundcloud/client-credentials") {
-      return handleClientCredentials(request, env);
-    }
+  if (url.pathname === "/oauth/lastfm/mobile-session") {
+    return handleLastFMMobileSession(request, env);
+  }
 
-    if (url.pathname === "/oauth/lastfm/mobile-session") {
-      return handleLastFMMobileSession(request, env);
-    }
+  if (url.pathname === "/lastfm/now-playing") {
+    return handleLastFMNowPlaying(request, env);
+  }
 
-    if (url.pathname === "/lastfm/now-playing") {
-      return handleLastFMNowPlaying(request, env);
-    }
+  if (url.pathname === "/lastfm/scrobble") {
+    return handleLastFMScrobble(request, env);
+  }
 
-    if (url.pathname === "/lastfm/scrobble") {
-      return handleLastFMScrobble(request, env);
-    }
+  if (url.pathname === "/lastfm/taste") {
+    return handleLastFMTaste(request, env);
+  }
 
-    if (url.pathname === "/lastfm/taste") {
-      return handleLastFMTaste(request, env);
-    }
+  return json({ error: "not_found" }, 404);
+}
 
-    return json({ error: "not_found" }, 404);
+function isPublicRoute(request: Request, url: URL): boolean {
+  return request.method === "GET" && (url.pathname === "/healthz" || url.pathname === "/version");
 }
 
 async function handleExchange(request: Request, env: Env): Promise<Response> {
@@ -195,7 +238,7 @@ async function handleExchange(request: Request, env: Env): Promise<Response> {
     redirect_uri: redirectUri
   });
 
-  return proxyTokenRequest(cfg.value, payload);
+  return proxyTokenRequest(cfg.value, payload, loadUpstreamTimeoutMs(env));
 }
 
 async function handleRefresh(request: Request, env: Env): Promise<Response> {
@@ -225,7 +268,7 @@ async function handleRefresh(request: Request, env: Env): Promise<Response> {
     refresh_token: refreshToken
   });
 
-  return proxyTokenRequest(cfg.value, payload);
+  return proxyTokenRequest(cfg.value, payload, loadUpstreamTimeoutMs(env));
 }
 
 async function handleClientCredentials(request: Request, env: Env): Promise<Response> {
@@ -242,7 +285,7 @@ async function handleClientCredentials(request: Request, env: Env): Promise<Resp
     grant_type: "client_credentials"
   });
 
-  return proxyTokenRequest(cfg.value, payload, {
+  return proxyTokenRequest(cfg.value, payload, loadUpstreamTimeoutMs(env), {
     Authorization: `Basic ${btoa(`${cfg.value.clientID}:${cfg.value.clientSecret}`)}`
   });
 }
@@ -276,7 +319,7 @@ async function handleLastFMMobileSession(request: Request, env: Env): Promise<Re
   };
   params.api_sig = signLastFM(params, cfg.value.apiSecret);
 
-  return proxyLastFMRequest(cfg.value, params);
+  return proxyLastFMRequest(cfg.value, params, loadUpstreamTimeoutMs(env));
 }
 
 async function handleLastFMNowPlaying(request: Request, env: Env): Promise<Response> {
@@ -312,7 +355,7 @@ async function handleLastFMNowPlaying(request: Request, env: Env): Promise<Respo
   }
 
   params.api_sig = signLastFM(params, cfg.value.apiSecret);
-  return proxyLastFMRequest(cfg.value, params);
+  return proxyLastFMRequest(cfg.value, params, loadUpstreamTimeoutMs(env));
 }
 
 async function handleLastFMScrobble(request: Request, env: Env): Promise<Response> {
@@ -352,7 +395,7 @@ async function handleLastFMScrobble(request: Request, env: Env): Promise<Respons
   }
 
   params.api_sig = signLastFM(params, cfg.value.apiSecret);
-  return proxyLastFMRequest(cfg.value, params);
+  return proxyLastFMRequest(cfg.value, params, loadUpstreamTimeoutMs(env));
 }
 
 async function handleLastFMTaste(request: Request, env: Env): Promise<Response> {
@@ -376,6 +419,7 @@ async function handleLastFMTaste(request: Request, env: Env): Promise<Response> 
   }
 
   const limit = clampLimit(body.value.limit, 50, 100);
+  const upstreamTimeoutMs = loadUpstreamTimeoutMs(env);
   const [recent, artists] = await Promise.all([
     fetchLastFMJSON(cfg.value, {
       method: "user.getRecentTracks",
@@ -383,14 +427,14 @@ async function handleLastFMTaste(request: Request, env: Env): Promise<Response> 
       limit: String(limit),
       extended: "0",
       api_key: cfg.value.apiKey
-    }),
+    }, upstreamTimeoutMs),
     fetchLastFMJSON(cfg.value, {
       method: "user.getTopArtists",
       user: username,
       period: "1month",
       limit: String(Math.min(limit, 30)),
       api_key: cfg.value.apiKey
-    })
+    }, upstreamTimeoutMs)
   ]);
 
   if (!recent.ok) {
@@ -408,32 +452,63 @@ async function handleLastFMTaste(request: Request, env: Env): Promise<Response> 
   });
 }
 
+type UpstreamTextResult =
+  | { ok: true; value: { response: Response; text: string } }
+  | {
+      ok: false;
+      error: "upstream_timeout" | "upstream_unavailable" | "upstream_response_too_large";
+      status: 502 | 504;
+    };
+
+async function fetchUpstreamText(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<UpstreamTextResult> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort("upstream_timeout");
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const textResult = await readLimitedText(response.body, MAX_UPSTREAM_JSON_BYTES);
+    if (!textResult.ok) {
+      return { ok: false, error: "upstream_response_too_large", status: 502 };
+    }
+    return { ok: true, value: { response, text: textResult.value } };
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "";
+    if (timedOut || errorName === "AbortError" || errorName === "TimeoutError") {
+      return { ok: false, error: "upstream_timeout", status: 504 };
+    }
+    return { ok: false, error: "upstream_unavailable", status: 502 };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function proxyTokenRequest(
   cfg: BrokerConfig,
   payload: URLSearchParams,
+  timeoutMs: number,
   headers: Record<string, string> = {}
 ): Promise<Response> {
-  let upstream: Response;
-
-  try {
-    upstream = await fetch(cfg.tokenURL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-        ...headers
-      },
-      body: payload
-    });
-  } catch {
-    return json({ error: "upstream_unavailable" }, 502);
+  const upstreamResult = await fetchUpstreamText(cfg.tokenURL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...headers
+    },
+    body: payload
+  }, timeoutMs);
+  if (!upstreamResult.ok) {
+    return json({ error: upstreamResult.error }, upstreamResult.status);
   }
-
-  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
-  if (!textResult.ok) {
-    return json({ error: "upstream_response_too_large" }, 502);
-  }
-  const text = textResult.value;
+  const { response: upstream, text } = upstreamResult.value;
   let responseBody = text;
 
   try {
@@ -450,31 +525,28 @@ async function proxyTokenRequest(
   });
 }
 
-async function proxyLastFMRequest(cfg: LastFMConfig, params: Record<string, string>): Promise<Response> {
+async function proxyLastFMRequest(
+  cfg: LastFMConfig,
+  params: Record<string, string>,
+  timeoutMs: number
+): Promise<Response> {
   const payload = new URLSearchParams({
     ...params,
     format: "json"
   });
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(cfg.apiURL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: payload
-    });
-  } catch {
-    return json({ error: "upstream_unavailable" }, 502);
+  const upstreamResult = await fetchUpstreamText(cfg.apiURL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload
+  }, timeoutMs);
+  if (!upstreamResult.ok) {
+    return json({ error: upstreamResult.error }, upstreamResult.status);
   }
-
-  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
-  if (!textResult.ok) {
-    return json({ error: "upstream_response_too_large" }, 502);
-  }
-  const text = textResult.value;
+  const { response: upstream, text } = upstreamResult.value;
   let responseBody = text;
 
   try {
@@ -495,31 +567,32 @@ type LastFMJSONResult =
   | { ok: true; value: unknown }
   | { ok: false; status: number; payload: unknown };
 
-async function fetchLastFMJSON(cfg: LastFMConfig, params: Record<string, string>): Promise<LastFMJSONResult> {
+async function fetchLastFMJSON(
+  cfg: LastFMConfig,
+  params: Record<string, string>,
+  timeoutMs: number
+): Promise<LastFMJSONResult> {
   const payload = new URLSearchParams({
     ...params,
     format: "json"
   });
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(cfg.apiURL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: payload
-    });
-  } catch {
-    return { ok: false, status: 502, payload: { error: "upstream_unavailable" } };
+  const upstreamResult = await fetchUpstreamText(cfg.apiURL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload
+  }, timeoutMs);
+  if (!upstreamResult.ok) {
+    return {
+      ok: false,
+      status: upstreamResult.status,
+      payload: { error: upstreamResult.error }
+    };
   }
-
-  const textResult = await readLimitedText(upstream.body, MAX_UPSTREAM_JSON_BYTES);
-  if (!textResult.ok) {
-    return { ok: false, status: 502, payload: { error: "upstream_response_too_large" } };
-  }
-  const text = textResult.value;
+  const { response: upstream, text } = upstreamResult.value;
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -609,7 +682,7 @@ function json(payload: unknown, status = 200, headers: Record<string, string> = 
 }
 
 async function checkRateLimit(request: Request, env: Env, url: URL): Promise<RateLimitResult> {
-  if (request.method === "GET" && (url.pathname === "/healthz" || url.pathname === "/version")) {
+  if (request.method === "OPTIONS" || isPublicRoute(request, url)) {
     return { ok: true };
   }
 
@@ -624,26 +697,34 @@ async function checkRateLimit(request: Request, env: Env, url: URL): Promise<Rat
     return { ok: true };
   }
 
-  const fingerprint = await rateLimitKey(request);
-  const nowMs = Date.now();
-  const windowSeconds = cfg.windowSeconds;
-  const windowIndex = Math.floor(nowMs / (windowSeconds * 1_000));
-  const kvKey = `rl:${fingerprint}:${windowIndex}`;
+  try {
+    const fingerprint = await rateLimitKey(request);
+    const nowMs = Date.now();
+    const windowSeconds = cfg.windowSeconds;
+    const windowIndex = Math.floor(nowMs / (windowSeconds * 1_000));
+    const kvKey = `rl:${fingerprint}:${windowIndex}`;
 
-  const raw = await env.RATE_LIMIT.get(kvKey);
-  const count = raw ? Number(raw) : 0;
-  if (Number.isFinite(count) && count >= cfg.maxRequests) {
-    const elapsedInWindow = Math.floor(nowMs / 1_000) % windowSeconds;
-    const retryAfterSeconds = Math.max(1, windowSeconds - elapsedInWindow);
-    return { ok: false, retryAfterSeconds };
+    const raw = await env.RATE_LIMIT.get(kvKey);
+    const count = raw ? Number(raw) : 0;
+    if (Number.isFinite(count) && count >= cfg.maxRequests) {
+      const elapsedInWindow = Math.floor(nowMs / 1_000) % windowSeconds;
+      const retryAfterSeconds = Math.max(1, windowSeconds - elapsedInWindow);
+      return { ok: false, reason: "limited", retryAfterSeconds };
+    }
+
+    // Best-effort read-modify-write; KV is eventually consistent so concurrent
+    // requests within the same window may undercount. Acceptable as abuse protection.
+    await env.RATE_LIMIT.put(kvKey, String(count + 1), {
+      expirationTtl: Math.max(60, windowSeconds)
+    });
+    return { ok: true };
+  } catch {
+    if (isRateLimitFailClosed(env)) {
+      return { ok: false, reason: "unavailable", retryAfterSeconds: 1 };
+    }
+    console.warn(JSON.stringify({ type: "rate_limit_bypass", reason: "kv_unavailable" }));
+    return { ok: true };
   }
-
-  // Best-effort read-modify-write; KV is eventually consistent so concurrent
-  // requests within the same window may undercount. Acceptable as abuse protection.
-  await env.RATE_LIMIT.put(kvKey, String(count + 1), {
-    expirationTtl: Math.max(60, windowSeconds)
-  });
-  return { ok: true };
 }
 
 function withCORS(env: Env, response: Response): Response {

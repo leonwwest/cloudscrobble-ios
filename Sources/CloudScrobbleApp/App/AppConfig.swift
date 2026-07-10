@@ -54,16 +54,22 @@ struct AppConfig {
         guard let rawTokenBroker = stringValue(for: "SOUNDCLOUD_TOKEN_BROKER_BASE_URL", in: values),
               let tokenBrokerBaseURL = URL(string: rawTokenBroker),
               let tokenBrokerScheme = tokenBrokerBaseURL.scheme?.lowercased(),
-              ["http", "https"].contains(tokenBrokerScheme),
               tokenBrokerBaseURL.host != nil else {
             return deployedTokenBrokerBaseURL
         }
 
-        return publicTokenBrokerURL(for: tokenBrokerBaseURL)
-    }
+        if tokenBrokerScheme == "https" {
+            return tokenBrokerBaseURL
+        }
 
-    private static func publicTokenBrokerURL(for configuredURL: URL) -> URL {
-        NetworkURLPolicy.isLocalNetworkURL(configuredURL) ? deployedTokenBrokerBaseURL : configuredURL
+        #if DEBUG
+        if tokenBrokerScheme == "http", NetworkURLPolicy.isLocalNetworkURL(tokenBrokerBaseURL) {
+            return tokenBrokerBaseURL
+        }
+        #endif
+
+        // Release builds never send credentials or tokens over cleartext HTTP.
+        return deployedTokenBrokerBaseURL
     }
 
     private static func stringValue(for key: String, in values: [String: Any]) -> String? {

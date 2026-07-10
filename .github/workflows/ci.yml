@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift package
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Swift package
+        run: swift test
+      - name: Build Swift package (release)
+        run: swift build -c release
+
+  ios:
+    name: iOS app (release)
+    runs-on: macos-15
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Regenerate Xcode project
+        run: xcodegen generate
+      - name: Verify generated project is committed
+        run: git diff --exit-code -- CloudScrobbleiOS.xcodeproj CloudScrobbleiOS/Info.plist
+      - name: Build iOS app for Simulator
+        run: >-
+          xcodebuild
+          -project CloudScrobbleiOS.xcodeproj
+          -scheme CloudScrobbleiOS
+          -configuration Release
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+  go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.mod
+      - name: Test broker mirror
+        run: go test ./...
+
+  worker:
+    name: Worker check and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: workers/soundcloud-token-broker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/soundcloud-token-broker/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check Worker
+        run: npm run check
+      - name: Test Worker
+        run: npm test
+
+  scripts:
+    name: Shell script syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts
+        run: bash -n scripts/*.sh

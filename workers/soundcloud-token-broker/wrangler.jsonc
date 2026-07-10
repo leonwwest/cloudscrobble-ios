@@ -8,7 +8,10 @@
     "SOUNDCLOUD_TOKEN_URL": "https://secure.soundcloud.com/oauth/token",
     "ALLOWED_ORIGIN": "",
     "RATE_LIMIT_PER_MINUTE": "90",
-    "RATE_LIMIT_WINDOW_SECONDS": "60"
+    "RATE_LIMIT_WINDOW_SECONDS": "60",
+    "RATE_LIMIT_FAIL_CLOSED": "true",
+    "REQUIRE_APP_API_KEY": "true",
+    "UPSTREAM_TIMEOUT_MS": "10000"
   },
   "secrets_store_secrets": [],
   "observability": {

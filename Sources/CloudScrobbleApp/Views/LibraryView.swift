@@ -6,18 +6,19 @@ import UIKit
 
 struct LibraryView: View {
     private enum LibraryScope: String, CaseIterable, Identifiable {
-        case overview = "Übersicht"
+        case overview = "Overview"
         case likes = "Likes"
         case playlists = "Playlists"
-        case stations = "Sender"
-        case history = "Verlauf"
+        case stations = "Stations"
+        case history = "History"
 
         var id: String { rawValue }
     }
 
     @ObservedObject var session: AppSessionViewModel
     @ObservedObject private var playerController: PlayerScrobbleController
-    @StateObject private var viewModel: LibraryViewModel
+    @ObservedObject private var viewModel: LibraryViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scope: LibraryScope = .overview
     private let onOpenSearch: (() -> Void)?
 
@@ -29,7 +30,7 @@ struct LibraryView: View {
         self.session = session
         self.onOpenSearch = onOpenSearch
         _playerController = ObservedObject(wrappedValue: session.playerController)
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = ObservedObject(wrappedValue: viewModel)
     }
 
     private var libraryRefreshID: String {
@@ -183,10 +184,10 @@ struct LibraryView: View {
                     .background(Circle().fill(CloudTheme.sky.opacity(0.15)))
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Library braucht Full Login")
+                    Text("Library requires Full Login")
                         .font(.system(.headline, design: .rounded).weight(.black))
                         .foregroundStyle(CloudTheme.ink)
-                    Text("Public Mode kann öffentliche Tracks suchen und abspielen, hat aber keinen Zugriff auf deine Likes, Playlists oder dein Profil.")
+                    Text("Public Mode can search and play public tracks, but it cannot access your likes, playlists, or profile.")
                         .font(.system(.subheadline, design: .rounded).weight(.semibold))
                         .foregroundStyle(CloudTheme.muted)
                         .lineSpacing(2)
@@ -243,11 +244,11 @@ struct LibraryView: View {
             HStack(spacing: 18) {
                 ForEach(LibraryScope.allCases) { tab in
                     Button {
-                        withAnimation(.easeOut(duration: 0.18)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                             scope = tab
                         }
                     } label: {
-                        Text(tab.rawValue)
+                        Text(LocalizedStringKey(tab.rawValue))
                             .font(.system(.headline, design: .rounded).weight(.black))
                             .foregroundStyle(scope == tab ? CloudTheme.ink : CloudTheme.muted)
                             .padding(.vertical, 8)
@@ -310,7 +311,7 @@ struct LibraryView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            LibrarySectionHeader(title: "Kürzlich abgespielt", icon: "clock.arrow.circlepath")
+            LibrarySectionHeader(title: "Recently Played", icon: "clock.arrow.circlepath")
 
             if playerController.recentlyPlayed.isEmpty {
                 LibraryEmptyRow(text: "No playback history yet")
@@ -354,7 +355,7 @@ struct LibraryView: View {
     @ViewBuilder
     private var stationSection: some View {
         if !viewModel.stationMixes.isEmpty {
-            LibrarySectionHeader(title: "Sender", icon: "dot.radiowaves.left.and.right")
+            LibrarySectionHeader(title: "Stations", icon: "dot.radiowaves.left.and.right")
 
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 12) {
@@ -440,13 +441,21 @@ private struct LibraryProfileHeader: View {
             .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(user?.username ?? "My SoundCloud")
-                    .font(.system(.title3, design: .rounded).weight(.black))
-                    .foregroundStyle(CloudTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                if let user {
+                    Text(user.username)
+                        .font(.system(.title3, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                } else {
+                    Text("My SoundCloud")
+                        .font(.system(.title3, design: .rounded).weight(.black))
+                        .foregroundStyle(CloudTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
 
-                Text(user == nil ? "Library" : "Playlists, likes and mixes")
+                Text(LocalizedStringKey(user == nil ? "Library" : "Playlists, likes and mixes"))
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
                     .lineLimit(1)
@@ -476,7 +485,7 @@ private struct LibraryMessageBanner: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(CloudTheme.warning)
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.warning)
                 .lineLimit(3)
@@ -503,7 +512,7 @@ private struct LibrarySectionHeader: View {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(CloudTheme.sky)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.headline, design: .rounded).weight(.black))
                 .foregroundStyle(CloudTheme.ink)
         }
@@ -515,7 +524,7 @@ private struct LibraryEmptyRow: View {
     let text: String
 
     var body: some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(.system(.caption, design: .rounded).weight(.semibold))
             .foregroundStyle(CloudTheme.muted)
             .padding(12)
@@ -865,7 +874,6 @@ private struct LibraryPlaylistTracksSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -937,7 +945,6 @@ private struct LibraryMixTracksSheet: View {
             .padding()
         }
         .background(CloudBackdrop())
-        .preferredColorScheme(.dark)
     }
 }
 

@@ -1,6 +1,10 @@
 import CloudScrobbleCore
 import Foundation
 import SwiftUI
+#if os(iOS)
+import AVKit
+import UIKit
+#endif
 
 struct PlayerView: View {
     @ObservedObject var session: AppSessionViewModel
@@ -9,6 +13,9 @@ struct PlayerView: View {
     @State private var isSeeking = false
     @State private var seekValue: Double = 0
     @State private var showDiagnosticsSheet = false
+    @State private var scrobbleEditor: ScrobbleEditorPayload?
+    @State private var showClearQueueConfirmation = false
+    @State private var showClearRecentConfirmation = false
 
     init(session: AppSessionViewModel) {
         self.session = session
@@ -34,6 +41,41 @@ struct PlayerView: View {
             ScrobbleDiagnosticsView(controller: controller) {
                 Task { await controller.refreshLastFMDiagnostics() }
             }
+        }
+        .sheet(item: $scrobbleEditor) { payload in
+            ScrobbleMetadataEditor(
+                payload: payload,
+                onSave: { artist, track, isTrackEnabled, isArtistExcluded in
+                    await session.saveScrobbleConfiguration(
+                        for: payload.item,
+                        artist: artist,
+                        track: track,
+                        isTrackEnabled: isTrackEnabled,
+                        isArtistExcluded: isArtistExcluded
+                    )
+                },
+                onReset: {
+                    await session.resetScrobbleConfiguration(for: payload.item)
+                }
+            )
+        }
+        .confirmationDialog(
+            "Clear the entire queue?",
+            isPresented: $showClearQueueConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear queue", role: .destructive) { controller.clearQueue() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Current playback and the saved queue will be removed.")
+        }
+        .confirmationDialog(
+            "Clear recently played?",
+            isPresented: $showClearRecentConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear recently played", role: .destructive) { controller.clearRecentlyPlayed() }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -87,6 +129,24 @@ struct PlayerView: View {
                             .foregroundStyle(CloudTheme.muted)
                     }
 
+                    HStack(spacing: 8) {
+                        if !item.scrobbleEnabled {
+                            Label("Scrobbling off", systemImage: "dot.radiowaves.left.and.right.slash")
+                                .font(.system(.caption, design: .rounded).weight(.bold))
+                                .foregroundStyle(CloudTheme.warning)
+                        }
+                        Spacer(minLength: 4)
+                        Button {
+                            Task {
+                                let configuration = await session.scrobbleConfiguration(for: item)
+                                scrobbleEditor = ScrobbleEditorPayload(item: item, configuration: configuration)
+                            }
+                        } label: {
+                            Label("Edit scrobble", systemImage: "pencil")
+                        }
+                        .buttonStyle(SecondaryPillButtonStyle())
+                    }
+
                     Slider(
                         value: Binding(
                             get: {
@@ -105,6 +165,10 @@ struct PlayerView: View {
                         }
                     )
                         .tint(CloudTheme.sky)
+                        .accessibilityLabel("Playback position")
+                        .accessibilityValue(
+                            "\(timeLabel(isSeeking ? seekValue : controller.elapsedSeconds)) of \(timeLabel(Double(item.durationSeconds)))"
+                        )
                     HStack {
                         Text(timeLabel(isSeeking ? seekValue : controller.elapsedSeconds))
                         Spacer()
@@ -137,16 +201,19 @@ struct PlayerView: View {
                             Image(systemName: "backward.fill")
                         }
                         .buttonStyle(IconCircleButtonStyle())
+                        .accessibilityLabel("Previous track")
 
                         Button { controller.togglePlayback() } label: {
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         }
                         .buttonStyle(IconCircleButtonStyle(isPrimary: true))
+                        .accessibilityLabel(isPlaying ? "Pause" : "Play")
 
                         Button { controller.next() } label: {
                             Image(systemName: "forward.fill")
                         }
                         .buttonStyle(IconCircleButtonStyle())
+                        .accessibilityLabel("Next track")
                         Spacer()
                     }
 
@@ -170,6 +237,35 @@ struct PlayerView: View {
                         }
                         .buttonStyle(PlayerModeButtonStyle(isActive: controller.repeatMode != .off))
                     }
+
+                    HStack(spacing: 10) {
+                        Menu {
+                            ForEach([15, 30, 45, 60], id: \.self) { minutes in
+                                Button("\(minutes) minutes") {
+                                    controller.startSleepTimer(minutes: minutes)
+                                }
+                            }
+                            if controller.sleepTimerEndsAt != nil {
+                                Divider()
+                                Button("Cancel sleep timer", role: .destructive) {
+                                    controller.cancelSleepTimer()
+                                }
+                            }
+                        } label: {
+                            Label(sleepTimerTitle, systemImage: "moon.zzz.fill")
+                        }
+                        .buttonStyle(PlayerModeButtonStyle(isActive: controller.sleepTimerEndsAt != nil))
+
+                        Spacer()
+
+#if os(iOS)
+                        AirPlayRoutePickerButton()
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(CloudTheme.elevated))
+                            .clipShape(Circle())
+                            .accessibilityLabel("Choose audio output")
+#endif
+                    }
                 }
             }
         }
@@ -188,7 +284,7 @@ struct PlayerView: View {
                 Spacer()
                 if !controller.queue.isEmpty {
                     Button {
-                        controller.clearQueue()
+                        showClearQueueConfirmation = true
                     } label: {
                         Image(systemName: "trash")
                     }
@@ -202,17 +298,24 @@ struct PlayerView: View {
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
             } else {
-                ForEach(Array(controller.queue.enumerated()), id: \.element.id) { index, item in
-                    QueueItemRow(
-                        item: item,
-                        isCurrent: controller.currentIndex == index,
-                        canMoveUp: index > 0,
-                        canMoveDown: index < controller.queue.count - 1,
-                        onPlay: { controller.playQueueItem(at: index) },
-                        onMoveUp: { controller.moveQueueItem(from: index, to: index - 1) },
-                        onMoveDown: { controller.moveQueueItem(from: index, to: index + 1) },
-                        onRemove: { controller.removeQueueItem(at: index) }
-                    )
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(controller.queue.enumerated()), id: \.offset) { index, item in
+                        QueueItemRow(
+                            item: item,
+                            dragIdentifier: String(index),
+                            isCurrent: controller.currentIndex == index,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < controller.queue.count - 1,
+                            onPlay: { controller.playQueueItem(at: index) },
+                            onMoveUp: { controller.moveQueueItem(from: index, to: index - 1) },
+                            onMoveDown: { controller.moveQueueItem(from: index, to: index + 1) },
+                            onRemove: { controller.removeQueueItem(at: index) }
+                        )
+                        .dropDestination(for: String.self) { identifiers, _ in
+                            guard let sourceIdentifier = identifiers.first else { return false }
+                            return reorderQueue(sourceIdentifier: sourceIdentifier, targetIndex: index)
+                        }
+                    }
                 }
             }
         }
@@ -231,7 +334,7 @@ struct PlayerView: View {
                         .foregroundStyle(CloudTheme.ink)
                     Spacer()
                     Button {
-                        controller.clearRecentlyPlayed()
+                        showClearRecentConfirmation = true
                     } label: {
                         Image(systemName: "xmark")
                     }
@@ -280,7 +383,7 @@ struct PlayerView: View {
     }
 
     private func artwork(for item: QueueItem, size: CGFloat = 184) -> some View {
-        CachedArtworkImage(url: item.artworkURL, iconName: "music.note")
+        CachedArtworkImage(url: item.artworkURL, iconName: "music.note", maxPixelSize: 512)
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
@@ -301,6 +404,22 @@ struct PlayerView: View {
             return "Queue empty"
         }
         return "\(currentIndex + 1) of \(controller.queue.count)"
+    }
+
+    private var sleepTimerTitle: String {
+        guard let endDate = controller.sleepTimerEndsAt else { return "Sleep timer" }
+        return "Until \(endDate.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private func reorderQueue(sourceIdentifier: String, targetIndex: Int) -> Bool {
+        guard let sourceIndex = Int(sourceIdentifier),
+              controller.queue.indices.contains(sourceIndex),
+              controller.queue.indices.contains(targetIndex),
+              sourceIndex != targetIndex else {
+            return false
+        }
+        controller.moveQueueItem(from: sourceIndex, to: targetIndex)
+        return true
     }
 
     private var repeatModeIcon: String {
@@ -383,6 +502,7 @@ struct PlayerView: View {
 
 private struct QueueItemRow: View {
     let item: QueueItem
+    let dragIdentifier: String
     let isCurrent: Bool
     let canMoveUp: Bool
     let canMoveDown: Bool
@@ -423,6 +543,14 @@ private struct QueueItemRow: View {
             }
 
             HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(.body, design: .rounded).weight(.bold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+                    .draggable(dragIdentifier)
+                    .accessibilityLabel("Drag to reorder")
+
                 Button(action: onMoveUp) {
                     Image(systemName: "chevron.up")
                 }
@@ -455,6 +583,169 @@ private struct QueueItemRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
+
+private struct ScrobbleEditorPayload: Identifiable {
+    let item: QueueItem
+    let configuration: ScrobbleTrackConfiguration
+
+    var id: String { item.trackURN }
+}
+
+private struct ScrobbleMetadataEditor: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let payload: ScrobbleEditorPayload
+    let onSave: (_ artist: String, _ track: String, _ isTrackEnabled: Bool, _ isArtistExcluded: Bool) async -> Void
+    let onReset: () async -> Void
+
+    @State private var artist: String
+    @State private var track: String
+    @State private var isTrackEnabled: Bool
+    @State private var isArtistExcluded: Bool
+    @State private var isSaving = false
+    @State private var showResetConfirmation = false
+
+    init(
+        payload: ScrobbleEditorPayload,
+        onSave: @escaping (_ artist: String, _ track: String, _ isTrackEnabled: Bool, _ isArtistExcluded: Bool) async -> Void,
+        onReset: @escaping () async -> Void
+    ) {
+        self.payload = payload
+        self.onSave = onSave
+        self.onReset = onReset
+        _artist = State(initialValue: payload.configuration.metadata.artist)
+        _track = State(initialValue: payload.configuration.metadata.track)
+        _isTrackEnabled = State(initialValue: !payload.configuration.isTrackExcluded)
+        _isArtistExcluded = State(initialValue: payload.configuration.isArtistExcluded)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Artist", text: $artist)
+                        .textContentType(.organizationName)
+                    TextField("Track title", text: $track)
+                } header: {
+                    Text("Last.fm metadata")
+                } footer: {
+                    Text("These values are saved for this SoundCloud track and used for future scrobbles.")
+                }
+
+                Section("Scrobbling") {
+                    Toggle("Scrobble this track", isOn: $isTrackEnabled)
+                    Toggle("Exclude this artist", isOn: $isArtistExcluded)
+
+                    Label(effectiveScrobbleStatus, systemImage: effectiveScrobbleIcon)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(effectiveScrobbleColor)
+                }
+
+                Section {
+                    Button("Restore automatic metadata", role: .destructive) {
+                        showResetConfirmation = true
+                    }
+                    .disabled(isSaving)
+                } footer: {
+                    Text("Reset removes the correction and both exclusions. It cannot undo scrobbles already sent to Last.fm.")
+                }
+            }
+            .navigationTitle("Edit scrobble")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Task {
+                            isSaving = true
+                            await onSave(trimmedArtist, trimmedTrack, isTrackEnabled, isArtistExcluded)
+                            dismiss()
+                        }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Save")
+                                .fontWeight(.bold)
+                        }
+                    }
+                    .disabled(!canSave)
+                }
+            }
+            .interactiveDismissDisabled(isSaving)
+            .confirmationDialog(
+                "Restore automatic scrobble settings?",
+                isPresented: $showResetConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Restore automatic settings", role: .destructive) {
+                    Task {
+                        isSaving = true
+                        await onReset()
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your metadata correction and exclusions for this track will be removed.")
+            }
+        }
+    }
+
+    private var trimmedArtist: String {
+        artist.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedTrack: String {
+        track.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        !isSaving && !trimmedArtist.isEmpty && !trimmedTrack.isEmpty
+    }
+
+    private var effectiveScrobbleStatus: String {
+        if isArtistExcluded {
+            return "All tracks by this artist will be excluded"
+        }
+        if !isTrackEnabled {
+            return "This track will not be scrobbled"
+        }
+        return "Scrobbling is enabled"
+    }
+
+    private var effectiveScrobbleIcon: String {
+        isArtistExcluded || !isTrackEnabled
+            ? "dot.radiowaves.left.and.right.slash"
+            : "checkmark.circle.fill"
+    }
+
+    private var effectiveScrobbleColor: Color {
+        isArtistExcluded || !isTrackEnabled ? CloudTheme.warning : CloudTheme.success
+    }
+}
+
+#if os(iOS)
+private struct AirPlayRoutePickerButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView(frame: .zero)
+        picker.prioritizesVideoDevices = false
+        picker.tintColor = .systemBlue
+        picker.activeTintColor = .systemBlue
+        picker.isAccessibilityElement = true
+        picker.accessibilityLabel = "Choose audio output"
+        return picker
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+#endif
 
 private struct RecentlyPlayedRow: View {
     let track: SavedPlaybackTrack
@@ -494,6 +785,8 @@ private struct RecentlyPlayedRow: View {
 }
 
 private struct PlayerModeButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let isActive: Bool
 
     func makeBody(configuration: Configuration) -> some View {
@@ -505,7 +798,7 @@ private struct PlayerModeButtonStyle: ButtonStyle {
             .minimumScaleFactor(0.82)
             .padding(.vertical, 8)
             .padding(.horizontal, 10)
-            .frame(minWidth: 92)
+            .frame(minWidth: 92, minHeight: 44)
             .background(
                 Capsule(style: .continuous)
                     .fill(isActive ? CloudTheme.sky : CloudTheme.elevated)
@@ -514,7 +807,7 @@ private struct PlayerModeButtonStyle: ButtonStyle {
                 Capsule(style: .continuous)
                     .stroke(Color.white.opacity(isActive ? 0.18 : 0.10), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1.0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }

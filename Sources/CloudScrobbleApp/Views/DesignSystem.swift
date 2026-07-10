@@ -3,40 +3,37 @@ import SwiftUI
 enum CloudTheme {
     static let night = Color(red: 0.02, green: 0.02, blue: 0.03)
     static let dusk = Color(red: 0.08, green: 0.09, blue: 0.11)
-    static let sky = Color(red: 1.00, green: 0.34, blue: 0.06)
+    static let sky = Color(red: 0.92, green: 0.28, blue: 0.03)
     static let seafoam = Color(red: 0.12, green: 0.78, blue: 0.68)
-    static let shell = Color(red: 0.10, green: 0.11, blue: 0.13)
-    static let ink = Color(red: 0.95, green: 0.96, blue: 0.98)
-    static let muted = Color(red: 0.61, green: 0.64, blue: 0.70)
+    static let shell = Color.primary.opacity(0.09)
+    static let ink = Color.primary
+    static let muted = Color.secondary
     static let success = Color(red: 0.12, green: 0.78, blue: 0.50)
     static let warning = Color(red: 1.00, green: 0.64, blue: 0.25)
 
     static let violet = Color(red: 0.33, green: 0.52, blue: 0.96)
     static let amber = Color(red: 1.00, green: 0.76, blue: 0.25)
-    static let line = Color.white.opacity(0.10)
-    static let elevated = Color.white.opacity(0.075)
-    static let elevatedStrong = Color.white.opacity(0.13)
+    static let line = Color.primary.opacity(0.11)
+    static let elevated = Color.primary.opacity(0.075)
+    static let elevatedStrong = Color.primary.opacity(0.13)
 }
 
 struct CloudBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    CloudTheme.night,
-                    Color(red: 0.06, green: 0.04, blue: 0.035),
-                    CloudTheme.dusk,
-                    CloudTheme.night
-                ],
+                colors: baseColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
             LinearGradient(
                 colors: [
-                    CloudTheme.sky.opacity(0.22),
+                    CloudTheme.sky.opacity(colorScheme == .dark ? 0.22 : 0.12),
                     Color.clear,
-                    CloudTheme.seafoam.opacity(0.10)
+                    CloudTheme.seafoam.opacity(colorScheme == .dark ? 0.10 : 0.07)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -55,9 +52,29 @@ struct CloudBackdrop: View {
         }
         .ignoresSafeArea()
     }
+
+    private var baseColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                CloudTheme.night,
+                Color(red: 0.06, green: 0.04, blue: 0.035),
+                CloudTheme.dusk,
+                CloudTheme.night
+            ]
+        }
+
+        return [
+            Color(red: 0.98, green: 0.97, blue: 0.95),
+            Color(red: 1.00, green: 0.98, blue: 0.95),
+            Color(red: 0.94, green: 0.96, blue: 0.98),
+            Color(red: 0.98, green: 0.98, blue: 0.97)
+        ]
+    }
 }
 
 struct CloudCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
         content
             .padding(13)
@@ -69,7 +86,12 @@ struct CloudCardModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(CloudTheme.line, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 12)
+            .shadow(
+                color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.10),
+                radius: 18,
+                x: 0,
+                y: 12
+            )
     }
 }
 
@@ -99,6 +121,8 @@ extension View {
 }
 
 struct PrimaryPillButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.subheadline, design: .rounded).weight(.bold))
@@ -117,12 +141,14 @@ struct PrimaryPillButtonStyle: ButtonStyle {
                     .stroke(Color.white.opacity(0.20), lineWidth: 1)
             )
             .shadow(color: CloudTheme.sky.opacity(configuration.isPressed ? 0.10 : 0.30), radius: 14, x: 0, y: 8)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1.0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
 struct SecondaryPillButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.subheadline, design: .rounded).weight(.semibold))
@@ -139,19 +165,21 @@ struct SecondaryPillButtonStyle: ButtonStyle {
                 Capsule(style: .continuous)
                     .stroke(CloudTheme.line, lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.98 : 1.0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
 struct IconCircleButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var isPrimary = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: isPrimary ? 19 : 16, weight: .bold, design: .rounded))
             .foregroundStyle(isPrimary ? .white : CloudTheme.ink)
-            .frame(width: isPrimary ? 58 : 42, height: isPrimary ? 58 : 42)
+            .frame(width: isPrimary ? 58 : 44, height: isPrimary ? 58 : 44)
             .background(
                 Circle()
                     .fill(isPrimary ? CloudTheme.sky : CloudTheme.elevated)
@@ -160,8 +188,8 @@ struct IconCircleButtonStyle: ButtonStyle {
                 Circle()
                     .stroke(Color.white.opacity(isPrimary ? 0.20 : 0.12), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.94 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }
 
@@ -174,10 +202,10 @@ struct StatusBadge: View {
             Circle()
                 .fill(isConnected ? CloudTheme.success : CloudTheme.warning)
                 .frame(width: 7, height: 7)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.caption2, design: .rounded).weight(.bold))
                 .lineLimit(1)
-            Text(isConnected ? "On" : "Off")
+            Text(LocalizedStringKey(isConnected ? "On" : "Off"))
                 .font(.system(.caption2, design: .rounded).weight(.semibold))
                 .foregroundStyle(CloudTheme.muted)
                 .lineLimit(1)
@@ -208,10 +236,10 @@ struct EmptyStateCard: View {
                 .foregroundStyle(CloudTheme.sky)
                 .frame(width: 50, height: 50)
                 .background(Circle().fill(CloudTheme.sky.opacity(0.14)))
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(.headline, design: .rounded).weight(.bold))
                 .foregroundStyle(CloudTheme.ink)
-            Text(subtitle)
+            Text(LocalizedStringKey(subtitle))
                 .multilineTextAlignment(.center)
                 .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(CloudTheme.muted)

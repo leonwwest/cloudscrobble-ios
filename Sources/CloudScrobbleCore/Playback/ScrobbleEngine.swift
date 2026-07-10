@@ -24,12 +24,17 @@ public final class ScrobbleEngine {
         isPaused = false
         previousPlaybackTime = nil
 
-        if track.durationSeconds >= 30 {
+        if track.scrobbleEnabled, track.durationSeconds >= 30 {
             let dynamicThreshold = min(TimeInterval(track.durationSeconds) * 0.5, 240)
             thresholdSeconds = max(30, dynamicThreshold)
             state.scrobbleThresholdSeconds = thresholdSeconds ?? 0
         } else {
             thresholdSeconds = nil
+        }
+
+        guard track.scrobbleEnabled else {
+            state.didSendNowPlaying = false
+            return []
         }
 
         state.didSendNowPlaying = true
@@ -48,9 +53,37 @@ public final class ScrobbleEngine {
     public func restore(track: QueueItem, state restoredState: ScrobbleState, playbackTime: TimeInterval, isPaused: Bool) {
         currentTrack = track
         state = restoredState
-        thresholdSeconds = restoredState.scrobbleThresholdSeconds > 0 ? restoredState.scrobbleThresholdSeconds : nil
+        thresholdSeconds = track.scrobbleEnabled && restoredState.scrobbleThresholdSeconds > 0
+            ? restoredState.scrobbleThresholdSeconds
+            : nil
         self.isPaused = isPaused
         previousPlaybackTime = playbackTime
+    }
+
+    /// Replaces the Last.fm metadata for the active track without losing
+    /// listened-time progress. Used after an in-player metadata correction.
+    public func updateTrack(_ track: QueueItem) -> [ScrobbleEngineEvent] {
+        guard currentTrack?.trackURN == track.trackURN else { return [] }
+        currentTrack = track
+
+        guard track.scrobbleEnabled else {
+            thresholdSeconds = nil
+            state.scrobbleThresholdSeconds = 0
+            state.didSendNowPlaying = false
+            return []
+        }
+
+        if track.durationSeconds >= 30 {
+            let dynamicThreshold = min(TimeInterval(track.durationSeconds) * 0.5, 240)
+            thresholdSeconds = max(30, dynamicThreshold)
+            state.scrobbleThresholdSeconds = thresholdSeconds ?? 0
+        } else {
+            thresholdSeconds = nil
+            state.scrobbleThresholdSeconds = 0
+        }
+
+        state.didSendNowPlaying = true
+        return [.sendNowPlaying(trackURN: track.trackURN, meta: track.lastFM, duration: track.durationSeconds)]
     }
 
     public func stop() {
@@ -63,6 +96,7 @@ public final class ScrobbleEngine {
 
     public func tick(playbackTime: TimeInterval) -> [ScrobbleEngineEvent] {
         guard let currentTrack,
+              currentTrack.scrobbleEnabled,
               let thresholdSeconds,
               !state.didScrobble,
               !isPaused else {
@@ -83,6 +117,7 @@ public final class ScrobbleEngine {
 
     public func finish(playbackTime: TimeInterval) -> [ScrobbleEngineEvent] {
         guard let currentTrack,
+              currentTrack.scrobbleEnabled,
               let thresholdSeconds,
               !state.didScrobble,
               !isPaused else {

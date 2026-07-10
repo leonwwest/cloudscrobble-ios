@@ -20,6 +20,44 @@ final class MetadataMapperTests: XCTestCase {
         XCTAssertEqual(mapped.track, "Song")
     }
 
+    func testVisibleArtistTitleOverridesMismatchedPublisherReleaseTitle() {
+        let user = SCUser(urn: "soundcloud:users:1", username: "label", permalink: nil, permalinkURL: nil, avatarURL: nil)
+        let track = SCTrack(
+            urn: "soundcloud:tracks:1",
+            title: "Artist - Actual Song",
+            durationMs: 180_000,
+            artworkURL: nil,
+            permalinkURL: nil,
+            user: user,
+            publisherMetadata: SCPublisherMetadata(artist: "Artist", releaseTitle: "Wrong EP Title"),
+            access: nil
+        )
+
+        let mapped = MetadataMapper.mapLastFM(track: track)
+
+        XCTAssertEqual(mapped.artist, "Artist")
+        XCTAssertEqual(mapped.track, "Actual Song")
+    }
+
+    func testPublisherReleaseTitleWinsWhenVisibleArtistDoesNotMatchPublisherArtist() {
+        let user = SCUser(urn: "soundcloud:users:1", username: "label", permalink: nil, permalinkURL: nil, avatarURL: nil)
+        let track = SCTrack(
+            urn: "soundcloud:tracks:1",
+            title: "Repost Channel - Teaser Clip",
+            durationMs: 180_000,
+            artworkURL: nil,
+            permalinkURL: nil,
+            user: user,
+            publisherMetadata: SCPublisherMetadata(artist: "Actual Artist", releaseTitle: "Actual Song"),
+            access: nil
+        )
+
+        let mapped = MetadataMapper.mapLastFM(track: track)
+
+        XCTAssertEqual(mapped.artist, "Actual Artist")
+        XCTAssertEqual(mapped.track, "Actual Song")
+    }
+
     func testFallsBackToArtistDashTitlePattern() {
         let user = SCUser(urn: "soundcloud:users:1", username: "uploader", permalink: nil, permalinkURL: nil, avatarURL: nil)
         let track = SCTrack(

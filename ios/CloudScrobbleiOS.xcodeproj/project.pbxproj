@@ -10,6 +10,7 @@
 		040F94047565D5D6BE78DE29 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 421CA9E7D7C63273891A7A09 /* ContentView.swift */; };
 		093F4B59F1C7E9C86973A64F /* AppSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB5DB08037BF4EF1CF0F9B9 /* AppSessionViewModel.swift */; };
 		237D2BF4E5F124D6DEE8AD1C /* LastFMTasteTrackResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA24D60C9674EEFB772D3381 /* LastFMTasteTrackResolver.swift */; };
+		4CBD002E8BE1B32383BB0E3B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 61968F76104AD7C78E07F3AC /* PrivacyInfo.xcprivacy */; };
 		5ED8CE2C14E39498DC319917 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */; };
 		648052C470E4682C2CF3FCA9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0081E85A5E455368AC42AF4 /* Assets.xcassets */; };
 		6C844DAE628B034B2E8549BF /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9B161067FCB19C11C1C896 /* HomeViewModel.swift */; };
@@ -48,6 +49,7 @@
 		421CA9E7D7C63273891A7A09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		52DA9610699F6681CE8BC048 /* CloudScrobble.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CloudScrobble.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		58E4BEFE51C2C90FD339BF32 /* ScrobbleDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrobbleDiagnosticsView.swift; sourceTree = "<group>"; };
+		61968F76104AD7C78E07F3AC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7FBFAE71534475A1934D4817 /* CloudScrobble */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudScrobble; path = ..; sourceTree = SOURCE_ROOT; };
 		8C6076FD6F46BF4FD6068665 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		908262BB3C0224A725AA62F3 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
@@ -189,6 +191,7 @@
 			children = (
 				C0081E85A5E455368AC42AF4 /* Assets.xcassets */,
 				E6483A24FB8E88F778170C28 /* Localizable.xcstrings */,
+				61968F76104AD7C78E07F3AC /* PrivacyInfo.xcprivacy */,
 			);
 			path = CloudScrobbleiOS;
 			sourceTree = "<group>";
@@ -282,6 +285,7 @@
 			files = (
 				648052C470E4682C2CF3FCA9 /* Assets.xcassets in Resources */,
 				D12F9311A7F26BD1D1053BD8 /* Localizable.xcstrings in Resources */,
+				4CBD002E8BE1B32383BB0E3B /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -436,6 +440,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = X5PHH4UVL5;
 				ENABLE_DEBUG_DYLIB = NO;
 				INFOPLIST_FILE = CloudScrobbleiOS/Info.plist;
@@ -445,6 +450,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.leonwestermeir.cloudscrobble.ios;
 				PRODUCT_NAME = CloudScrobble;
 				SDKROOT = iphoneos;
@@ -460,6 +466,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = X5PHH4UVL5;
 				ENABLE_DEBUG_DYLIB = NO;
 				INFOPLIST_FILE = CloudScrobbleiOS/Info.plist;
@@ -469,6 +476,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.leonwestermeir.cloudscrobble.ios;
 				PRODUCT_NAME = CloudScrobble;
 				SDKROOT = iphoneos;

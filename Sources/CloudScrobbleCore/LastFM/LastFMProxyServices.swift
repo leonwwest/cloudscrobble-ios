@@ -67,9 +67,12 @@ public actor LastFMProxyAuthService: LastFMAuthenticating {
         let data: Data
         do {
             data = try await httpClient.send(request).data
-        } catch CloudScrobbleError.httpStatus(_, let payload) {
-            guard let payload else { throw CloudScrobbleError.invalidResponse }
-            data = payload
+        } catch CloudScrobbleError.httpStatus(let statusCode, let payload) {
+            if let payload,
+               let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: payload) {
+                throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+            }
+            throw CloudScrobbleError.httpStatus(statusCode, payload)
         }
 
         if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: data) {
@@ -192,9 +195,12 @@ public actor LastFMProxyScrobbleService: LastFMScrobbleSending {
         let data: Data
         do {
             data = try await httpClient.send(request).data
-        } catch CloudScrobbleError.httpStatus(_, let payload) {
-            guard let payload else { throw CloudScrobbleError.invalidResponse }
-            data = payload
+        } catch CloudScrobbleError.httpStatus(let statusCode, let payload) {
+            if let payload,
+               let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: payload) {
+                throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+            }
+            throw CloudScrobbleError.httpStatus(statusCode, payload)
         }
 
         if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: data) {
@@ -271,9 +277,12 @@ public actor LastFMProxyTasteService: LastFMTasteFetching {
         let data: Data
         do {
             data = try await httpClient.send(request).data
-        } catch CloudScrobbleError.httpStatus(_, let payload) {
-            guard let payload else { throw CloudScrobbleError.invalidResponse }
-            data = payload
+        } catch CloudScrobbleError.httpStatus(let statusCode, let payload) {
+            if let payload,
+               let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: payload) {
+                throw CloudScrobbleError.lastFMError(code: apiError.error, message: apiError.message)
+            }
+            throw CloudScrobbleError.httpStatus(statusCode, payload)
         }
 
         if let apiError = try? JSONDecoder().decode(LastFMErrorResponse.self, from: data) {

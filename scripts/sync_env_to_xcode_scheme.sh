@@ -38,8 +38,7 @@ allowed_keys = {
     "SOUNDCLOUD_CLIENT_ID",
     "SOUNDCLOUD_REDIRECT_URI",
     "SOUNDCLOUD_TOKEN_BROKER_BASE_URL",
-    "LASTFM_API_KEY",
-    "LASTFM_API_SECRET",
+    "CS_APP_API_KEY",
 }
 
 parsed = {}

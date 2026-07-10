@@ -48,6 +48,7 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private weak var session: AppSessionViewModel?
+    private var refreshGeneration = UUID()
 
     init(session: AppSessionViewModel) {
         self.session = session
@@ -55,18 +56,24 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func refresh() async {
+        let generation = UUID()
+        refreshGeneration = generation
+
         guard let session else {
-            errorMessage = "App session unavailable"
+            isLoading = false
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
         guard let api = session.apiClient else {
+            isLoading = false
             errorMessage = hasLibraryContent
-                ? "Showing cached library. Connect SoundCloud to refresh."
-                : "Connect SoundCloud first"
+                ? String(localized: "Showing cached library. Connect SoundCloud to refresh.")
+                : String(localized: "Connect SoundCloud first")
             return
         }
         if session.soundCloudPublicMode && !session.soundCloudMockMode {
+            isLoading = false
             me = nil
             myTracks = []
             myPlaylists = []
@@ -76,12 +83,16 @@ final class LibraryViewModel: ObservableObject {
             stationMixes = []
             selectedPlaylist = nil
             selectedMix = nil
-            errorMessage = "Public Mode has no private /me library. Use full SoundCloud login for this tab."
+            errorMessage = String(localized: "Public Mode has no private library. Use full SoundCloud login for this tab.")
             return
         }
 
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if refreshGeneration == generation {
+                isLoading = false
+            }
+        }
 
         do {
             async let meTask = api.me()
@@ -89,15 +100,19 @@ final class LibraryViewModel: ObservableObject {
             async let likedTracksTask = api.myLikedTracks(limit: 50, nextHref: nil)
             async let likedPlaylistsTask = api.myLikedPlaylists(limit: 50, nextHref: nil)
 
-            let playlistsPage = try await playlistsTask
-            let likedTracksPage = try await likedTracksTask
-            let likedPlaylistsPage = try await likedPlaylistsTask
-
-            let profile = try await meTask
+            let (profile, playlistsPage, likedTracksPage, likedPlaylistsPage) = try await (
+                meTask,
+                playlistsTask,
+                likedTracksTask,
+                likedPlaylistsTask
+            )
+            guard isCurrentRefresh(generation) else { return }
             let tracksPage = try? await api.userTracks(urn: profile.urn, limit: 50, nextHref: nil)
             let ownedTracks = tracksPage?.collection ?? []
             let lastFMTasteTracks = await session.lastFMTasteTracks(api: api, maxTracks: 72)
             let libraryTracks = Self.uniqueTracks(lastFMTasteTracks + ownedTracks + likedTracksPage.collection)
+            let relatedStations = await buildRelatedStations(from: libraryTracks, api: api)
+            guard isCurrentRefresh(generation) else { return }
 
             me = profile
             myTracks = ownedTracks
@@ -105,17 +120,23 @@ final class LibraryViewModel: ObservableObject {
             myLikedTracks = likedTracksPage.collection
             myLikedPlaylists = likedPlaylistsPage.collection
             smartMixes = Self.buildSmartMixes(from: libraryTracks, lastFMTasteTracks: lastFMTasteTracks)
-            stationMixes = await buildRelatedStations(from: libraryTracks, api: api)
+            stationMixes = relatedStations
             persistCachedLibrary()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            if isCurrentRefresh(generation) {
+                errorMessage = error.localizedDescription
+            }
         }
+    }
+
+    private func isCurrentRefresh(_ generation: UUID) -> Bool {
+        !Task.isCancelled && refreshGeneration == generation
     }
 
     func play(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -130,7 +151,7 @@ final class LibraryViewModel: ObservableObject {
 
     func playNext(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -139,7 +160,7 @@ final class LibraryViewModel: ObservableObject {
 
     func addToQueue(track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -148,7 +169,7 @@ final class LibraryViewModel: ObservableObject {
 
     func play(mix: SmartMix) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -163,7 +184,7 @@ final class LibraryViewModel: ObservableObject {
 
     func play(savedTrack: SavedPlaybackTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
 
@@ -172,7 +193,7 @@ final class LibraryViewModel: ObservableObject {
 
     func open(playlist: SCPlaylist) async {
         guard let session else {
-            errorMessage = "Connect SoundCloud first"
+            errorMessage = String(localized: "Connect SoundCloud first")
             return
         }
 
@@ -191,7 +212,7 @@ final class LibraryViewModel: ObservableObject {
 
     func play(playlist: SCPlaylist) async {
         guard let session else {
-            errorMessage = "Connect SoundCloud first"
+            errorMessage = String(localized: "Connect SoundCloud first")
             return
         }
 
@@ -204,11 +225,11 @@ final class LibraryViewModel: ObservableObject {
 
     func playSelectedPlaylist() async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
         guard let selectedPlaylist else {
-            errorMessage = "No playlist selected"
+            errorMessage = String(localized: "No playlist selected")
             return
         }
 
@@ -217,7 +238,7 @@ final class LibraryViewModel: ObservableObject {
 
     func playSelectedPlaylist(startingWith track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
         guard let selectedPlaylist else {
@@ -231,7 +252,7 @@ final class LibraryViewModel: ObservableObject {
 
     func playSelectedMix() async {
         guard let selectedMix else {
-            errorMessage = "No mix selected"
+            errorMessage = String(localized: "No mix selected")
             return
         }
 
@@ -240,7 +261,7 @@ final class LibraryViewModel: ObservableObject {
 
     func playSelectedMix(startingWith track: SCTrack) async {
         guard let session else {
-            errorMessage = "App session unavailable"
+            errorMessage = String(localized: "App session unavailable")
             return
         }
         guard let selectedMix else {
@@ -269,50 +290,91 @@ final class LibraryViewModel: ObservableObject {
 
         guard !uniqueTracks.isEmpty else { return [] }
 
-        let shuffledTracks = Array(weightedShuffleTracks(
+        let shuffledPool = weightedShuffleTracks(
             lastFMTasteTracks: lastFMTasteTracks,
             libraryTracks: uniqueTracks
-        ).prefix(50))
+        )
+        let dailyPool = FeedPersonalization.stableWeightedOrder(
+            sources: [(items: uniqueTracks, weight: 1)],
+            seed: FeedPersonalization.daySeed() + "|library-daily",
+            key: { TrackIdentity.canonicalKey(for: $0) }
+        )
         var mixes: [SmartMix] = []
+        var usedTrackKeys = Set<String>()
 
         if !lastFMTasteTracks.isEmpty {
+            let tasteTracks = consumeMixTracks(
+                from: lastFMTasteTracks,
+                limit: 24,
+                minimumFallbackCount: 8,
+                usedKeys: &usedTrackKeys
+            )
+            if !tasteTracks.isEmpty {
+                mixes.append(
+                    SmartMix(
+                        id: "lastfm-taste",
+                        title: String(localized: "Last.fm Taste"),
+                        subtitle: String(localized: "\(tasteTracks.count) tracks from scrobbles and top artists"),
+                        tracks: tasteTracks,
+                        iconName: "music.note.list"
+                    )
+                )
+            }
+        }
+
+        let shuffledTracks = consumeMixTracks(
+            from: shuffledPool,
+            limit: 36,
+            minimumFallbackCount: 10,
+            usedKeys: &usedTrackKeys
+        )
+        if !shuffledTracks.isEmpty {
             mixes.append(
                 SmartMix(
-                    id: "lastfm-taste",
-                    title: "Last.fm Taste",
-                    subtitle: "\(min(lastFMTasteTracks.count, 50)) Tracks aus Scrobbles und Top-Artists",
-                    tracks: Array(lastFMTasteTracks.prefix(50)),
-                    iconName: "music.note.list"
+                    id: "library-shuffle",
+                    title: String(localized: "Likes Shuffle"),
+                    subtitle: String(localized: "\(shuffledTracks.count) tracks weighted heavily by Last.fm and likes"),
+                    tracks: shuffledTracks,
+                    iconName: "shuffle"
                 )
             )
         }
 
-        mixes.append(contentsOf: [
-            SmartMix(
-                id: "library-shuffle",
-                title: "Likes Shuffle",
-                subtitle: "\(shuffledTracks.count) Tracks stark gewichtet nach Last.fm und Likes",
-                tracks: shuffledTracks,
-                iconName: "shuffle"
-            ),
-            SmartMix(
-                id: "daily-drops",
-                title: "Daily Drops",
-                subtitle: "\(min(uniqueTracks.count, 12)) tracks from your likes",
-                tracks: Array(uniqueTracks.prefix(12)),
-                iconName: "sparkles"
+        let dailyTracks = consumeMixTracks(
+            from: dailyPool,
+            limit: 12,
+            minimumFallbackCount: 6,
+            usedKeys: &usedTrackKeys
+        )
+        if !dailyTracks.isEmpty {
+            mixes.append(
+                SmartMix(
+                    id: "daily-drops",
+                    title: String(localized: "Daily Drops"),
+                    subtitle: String(localized: "\(dailyTracks.count) tracks from your likes"),
+                    tracks: dailyTracks,
+                    iconName: "sparkles"
+                )
             )
-        ])
+        }
 
-        let mixCount = min(4, max(1, uniqueTracks.count))
+        let mixCount = min(4, max(1, Int(ceil(Double(uniqueTracks.count) / 12.0))))
         for offset in 0..<mixCount {
-            let rotated = Array(uniqueTracks[offset...]) + Array(uniqueTracks[..<offset])
+            let startIndex = (offset * max(1, uniqueTracks.count / mixCount)) % uniqueTracks.count
+            let rotated = Array(uniqueTracks.dropFirst(startIndex)) + Array(uniqueTracks.prefix(startIndex))
+            let mixTracks = consumeMixTracks(
+                from: rotated,
+                limit: 12,
+                minimumFallbackCount: 4,
+                usedKeys: &usedTrackKeys
+            )
+            guard !mixTracks.isEmpty else { continue }
             mixes.append(
                 SmartMix(
                     id: "your-mix-\(offset + 1)",
-                    title: "Your Mix \(offset + 1)",
-                    subtitle: "\(min(rotated.count, 12)) tracks tuned from your library",
-                    tracks: Array(rotated.prefix(12)),
+                    title: String(localized: "Your Mix \(offset + 1)"),
+                    subtitle: String(localized: "\(mixTracks.count) tracks tuned from your library"),
+                    tracks: mixTracks,
                     iconName: offset.isMultiple(of: 2) ? "waveform" : "dot.radiowaves.left.and.right"
                 )
             )
@@ -325,26 +387,65 @@ final class LibraryViewModel: ObservableObject {
         lastFMTasteTracks: [SCTrack],
         libraryTracks: [SCTrack]
     ) -> [SCTrack] {
-        let weightedTracks = repeated(lastFMTasteTracks, times: 7) + repeated(libraryTracks, times: 2)
-        return uniqueTracks(weightedTracks.shuffled())
+        FeedPersonalization.stableWeightedOrder(
+            sources: [
+                (items: lastFMTasteTracks, weight: 7),
+                (items: libraryTracks, weight: 2)
+            ],
+            seed: FeedPersonalization.daySeed() + "|library-shuffle",
+            key: { TrackIdentity.canonicalKey(for: $0) }
+        )
     }
 
-    private static func repeated(_ tracks: [SCTrack], times: Int) -> [SCTrack] {
-        guard times > 1 else { return tracks }
-        return (0..<times).flatMap { _ in tracks }
+    private static func consumeMixTracks(
+        from tracks: [SCTrack],
+        limit: Int,
+        minimumFallbackCount: Int,
+        usedKeys: inout Set<String>
+    ) -> [SCTrack] {
+        let unique = uniqueTracks(tracks)
+        var selected = Array(unique.filter {
+            !usedKeys.contains(TrackIdentity.canonicalKey(for: $0))
+        }.prefix(limit))
+
+        if selected.count < minimumFallbackCount {
+            let selectedKeys = Set(selected.map { TrackIdentity.canonicalKey(for: $0) })
+            selected.append(contentsOf: unique.filter {
+                !selectedKeys.contains(TrackIdentity.canonicalKey(for: $0))
+            }.prefix(limit - selected.count))
+        }
+
+        selected.forEach { usedKeys.insert(TrackIdentity.canonicalKey(for: $0)) }
+        return selected
     }
 
     private func buildRelatedStations(from tracks: [SCTrack], api: SoundCloudAPIClienting) async -> [SmartMix] {
+        let seeds = Array(Self.uniqueTracks(tracks).prefix(6))
+        var relatedResults: [(Int, SCTrack, [SCTrack])] = []
+
+        for batchStart in stride(from: 0, to: seeds.count, by: 3) {
+            let batchEnd = min(batchStart + 3, seeds.count)
+            await withTaskGroup(of: (Int, SCTrack, [SCTrack]).self) { group in
+                for index in batchStart..<batchEnd {
+                    let seed = seeds[index]
+                    group.addTask {
+                        let page = try? await api.relatedTracks(trackURN: seed.urn, limit: 25, nextHref: nil)
+                        return (index, seed, page?.collection ?? [])
+                    }
+                }
+
+                for await result in group {
+                    relatedResults.append(result)
+                }
+            }
+        }
+
         var stations: [SmartMix] = []
         var usedTracks = Set<String>()
 
-        for seed in Self.uniqueTracks(tracks).prefix(6) {
+        for (_, seed, relatedTracks) in relatedResults.sorted(by: { $0.0 < $1.0 }) {
             guard stations.count < 5 else { break }
-            guard let page = try? await api.relatedTracks(trackURN: seed.urn, limit: 25, nextHref: nil) else {
-                continue
-            }
-
-            let stationTracks = Self.uniqueTracks([seed] + page.collection)
+            let stationTracks = Self.uniqueTracks([seed] + relatedTracks)
                 .filter { track in
                     if track.id == seed.id { return true }
                     return !usedTracks.contains(track.id)
@@ -355,8 +456,8 @@ final class LibraryViewModel: ObservableObject {
             stations.append(
                 SmartMix(
                     id: "station-\(seed.id)",
-                    title: "\(seed.user.username) Sender",
-                    subtitle: "Radio aus \(seed.title)",
+                    title: String(localized: "\(seed.user.username) Station"),
+                    subtitle: String(localized: "Radio based on \(seed.title)"),
                     tracks: Array(stationTracks.prefix(24)),
                     iconName: "dot.radiowaves.left.and.right"
                 )
@@ -378,8 +479,8 @@ final class LibraryViewModel: ObservableObject {
             let rotated = Array(dedupedTracks.dropFirst(index)) + Array(dedupedTracks.prefix(index))
             return SmartMix(
                 id: "fallback-station-\(seed.id)",
-                title: "\(seed.user.username) Sender",
-                subtitle: "Radio aus \(seed.title)",
+                title: String(localized: "\(seed.user.username) Station"),
+                subtitle: String(localized: "Radio based on \(seed.title)"),
                 tracks: Array(rotated.prefix(20)),
                 iconName: "dot.radiowaves.left.and.right"
             )
