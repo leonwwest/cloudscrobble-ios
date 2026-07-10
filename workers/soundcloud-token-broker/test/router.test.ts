@@ -37,8 +37,8 @@ describe("broker router (unstable_dev)", () => {
     expect(body.appAPIKeyConfigured).toBe(true);
     expect(body.security.appAPIKeyRequired).toBe(true);
     expect(body.security.upstreamTimeoutMs).toBe(10_000);
-    expect(body.rateLimit.enabled).toBe(false);
-    expect(body.rateLimit.bindingConfigured).toBe(false);
+    expect(body.rateLimit.enabled).toBe(true);
+    expect(body.rateLimit.bindingConfigured).toBe(true);
   });
 
   it("responds to GET /version without an API key", async () => {

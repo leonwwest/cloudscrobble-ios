@@ -106,8 +106,8 @@ describe("worker security smoke", () => {
     });
     expect(body.rateLimit).toMatchObject({
       requested: true,
-      enabled: false,
-      bindingConfigured: false
+      enabled: true,
+      bindingConfigured: true
     });
   });
 
