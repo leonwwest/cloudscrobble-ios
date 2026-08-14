@@ -1,14 +1,36 @@
 # CloudScrobble
 
-Private iOS MVP to play SoundCloud tracks and scrobble to Last.fm.
+[![CI](https://github.com/leonwwest/cloudscrobble-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/leonwwest/cloudscrobble-ios/actions/workflows/ci.yml)
+
+A public native iOS client that plays SoundCloud tracks and scrobbles them to
+Last.fm through a server-side token broker. The repository spans a SwiftUI app,
+a testable Swift core, a local Go broker and a deployable Cloudflare Worker.
+
+## 60-second recruiter view
+
+| Area | Evidence in this repository |
+| --- | --- |
+| Product | Native SwiftUI search, library, queue and playback flows with Last.fm now-playing updates and scrobbling |
+| Security | SoundCloud OAuth with PKCE and state validation, session tokens in Keychain and provider secrets kept behind a broker boundary |
+| Reliability | Persisted offline scrobble queue, deduplication, batching, token refresh, bounded retries and stream-resolution fallback |
+| Architecture | `CloudScrobbleCore` isolates domain and integration logic; the app depends on protocols; hosted and local brokers share the same API contract |
+| CI | GitHub Actions runs Swift tests and a release build, an iOS Simulator release build, Go tests, Worker type-checking/tests and shell-script validation |
+| Release evidence | Reproducible release-mode builds plus documented security and E2E checks; App Store/TestFlight distribution is outside this public repository |
+
+Start with the [scrobble timing engine](Sources/CloudScrobbleCore/Playback/ScrobbleEngine.swift),
+[OAuth implementation](Sources/CloudScrobbleCore/SoundCloud/SoundCloudAuthService.swift),
+[security notes](docs/SECURITY.md), [test suite](Tests/CloudScrobbleCoreTests),
+[CI workflow](.github/workflows/ci.yml) and
+[end-to-end test guide](docs/E2E_TESTING.md).
 
 ## What is implemented
+
 - `CloudScrobbleCore` (Swift package target)
   - SoundCloud OAuth token handling via token broker
   - SoundCloud API client (search, profile, playlists, me, streams)
   - Playback URL resolver with `/streams` then `/stream` fallback
   - Last.fm mobile auth + `updateNowPlaying` + `scrobble`
-  - Offline scrobble queue persisted in Keychain
+  - Offline scrobble queue persisted locally with one-time migration from the legacy Keychain store
   - Batched Last.fm scrobble flush (`track.scrobble` with up to 50 items/request)
   - Metadata mapping + scrobble timing engine
   - AVPlayer controller with queue and scrobble dispatch
