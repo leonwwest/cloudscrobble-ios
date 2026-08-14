@@ -6,6 +6,23 @@ A public native iOS client that plays SoundCloud tracks and scrobbles them to
 Last.fm through a server-side token broker. The repository spans a SwiftUI app,
 a testable Swift core, a local Go broker and a deployable Cloudflare Worker.
 
+## Product evidence
+
+<table>
+  <tr>
+    <td align="center"><strong>Demo home</strong></td>
+    <td align="center"><strong>Scrobble diagnostics</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/demo-home.png" alt="CloudScrobble demo home with a local sample feed" width="360"></td>
+    <td><img src="docs/screenshots/scrobble-diagnostics.png" alt="CloudScrobble Last.fm status and scrobble history diagnostics" width="360"></td>
+  </tr>
+</table>
+
+These screenshots come from the checked-in iOS UI smoke test running against
+the local demo catalog. They require no provider credentials and can be
+reproduced from the repository; see [product evidence](docs/PRODUCT_EVIDENCE.md).
+
 ## 60-second recruiter view
 
 | Area | Evidence in this repository |
@@ -15,13 +32,14 @@ a testable Swift core, a local Go broker and a deployable Cloudflare Worker.
 | Reliability | Persisted offline scrobble queue, deduplication, batching, token refresh, bounded retries and stream-resolution fallback |
 | Architecture | `CloudScrobbleCore` isolates domain and integration logic; the app depends on protocols; hosted and local brokers share the same API contract |
 | CI | GitHub Actions runs Swift tests and a release build, an iOS Simulator release build, Go tests, Worker type-checking/tests and shell-script validation |
-| Release evidence | Reproducible release-mode builds plus documented security and E2E checks; App Store/TestFlight distribution is outside this public repository |
+| Release evidence | Reproducible release-mode builds, UI-test screenshots and a versioned GitHub release; App Store/TestFlight distribution is outside this public repository |
 
 Start with the [scrobble timing engine](Sources/CloudScrobbleCore/Playback/ScrobbleEngine.swift),
 [OAuth implementation](Sources/CloudScrobbleCore/SoundCloud/SoundCloudAuthService.swift),
 [security notes](docs/SECURITY.md), [test suite](Tests/CloudScrobbleCoreTests),
 [CI workflow](.github/workflows/ci.yml) and
-[end-to-end test guide](docs/E2E_TESTING.md).
+[end-to-end test guide](docs/E2E_TESTING.md). Public version history is listed
+under [GitHub Releases](https://github.com/leonwwest/cloudscrobble-ios/releases).
 
 ## What is implemented
 

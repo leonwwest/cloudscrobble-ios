@@ -23,11 +23,16 @@ final class CloudScrobbleiOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons["connection-public-test-mode"].exists)
         XCTAssertTrue(app.buttons["connection-demo-preview"].exists)
         XCTAssertTrue(app.buttons["connection-lastfm-scrobbling"].exists)
+        attachScreenshot(named: "01-onboarding", from: app)
+
+        app.buttons["connection-demo-preview"].tap()
+        XCTAssertTrue(app.buttons["disconnect-soundcloud-button"].waitForExistence(timeout: 4))
 
         app.buttons["onboarding-get-started-button"].tap()
 
         let settingsButton = app.buttons["settings-button"]
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 4))
+        attachScreenshot(named: "02-demo-home", from: app)
         settingsButton.tap()
 
         XCTAssertTrue(app.buttons["open-diagnostics-button"].waitForExistence(timeout: 4))
@@ -35,5 +40,13 @@ final class CloudScrobbleiOSUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["diagnostics-lastfm-status-title"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["diagnostics-scrobble-history-title"].exists)
+        attachScreenshot(named: "03-diagnostics", from: app)
+    }
+
+    private func attachScreenshot(named name: String, from app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
