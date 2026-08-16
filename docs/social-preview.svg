@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">CloudScrobble social preview</title>
+  <desc id="desc">A simple typographic preview for the native iOS scrobbling application.</desc>
+  <rect width="1280" height="640" fill="#f5f1e8"/>
+  <rect x="0" y="0" width="28" height="640" fill="#ef4b23"/>
+  <text x="76" y="92" fill="#ef4b23" font-family="Courier New, monospace" font-size="20" font-weight="700" letter-spacing="2">NATIVE iOS · v0.1.0</text>
+
+  <text x="72" y="250" fill="#181817" font-family="Arial, Helvetica, sans-serif" font-size="96" font-weight="700" letter-spacing="-4">CloudScrobble</text>
+  <text x="76" y="332" fill="#181817" font-family="Arial, Helvetica, sans-serif" font-size="39" letter-spacing="-1">Playback that survives the network.</text>
+  <text x="76" y="387" fill="#5e5c57" font-family="Arial, Helvetica, sans-serif" font-size="27">Resilient Last.fm scrobbling for SoundCloud.</text>
+
+  <line x1="76" y1="462" x2="1204" y2="462" stroke="#181817" stroke-width="2"/>
+  <text x="76" y="520" fill="#181817" font-family="Courier New, monospace" font-size="18" letter-spacing="1">SWIFTUI · OFFLINE QUEUE · KEYCHAIN · TOKEN BROKER</text>
+  <rect x="76" y="557" width="142" height="36" fill="#181817"/>
+  <text x="147" y="581" text-anchor="middle" fill="#f5f1e8" font-family="Courier New, monospace" font-size="16" font-weight="700">90 TESTS</text>
+  <text x="1204" y="581" text-anchor="end" fill="#5e5c57" font-family="Courier New, monospace" font-size="17">github.com/leonwwest/cloudscrobble-ios</text>
+</svg>
