@@ -9,6 +9,8 @@ contain private account data.
 
 | File | What it demonstrates |
 | --- | --- |
+| `demo/cloudscrobble-demo.mp4` | Credential-free onboarding, local demo feed, settings and scrobble diagnostics in the real iOS app |
+| `demo/cloudscrobble-demo-poster.png` | Still preview used to link the product demo from the repository front page |
 | `screenshots/demo-home.png` | Native navigation, connection state, personalized demo feed, mix and track cards |
 | `screenshots/scrobble-diagnostics.png` | Demo-mode boundary, Last.fm readiness, pending queue count and local scrobble history |
 | `../ios/CloudScrobbleiOSUITests/CloudScrobbleiOSUITests.swift` | Automated path that opens onboarding, activates Demo Preview and reaches diagnostics |
