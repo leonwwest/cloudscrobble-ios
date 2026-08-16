@@ -8,6 +8,12 @@ a testable Swift core, a local Go broker and a deployable Cloudflare Worker.
 
 ## Product evidence
 
+[![Watch the 55-second CloudScrobble product demo](docs/demo/cloudscrobble-demo-poster.png)](docs/demo/cloudscrobble-demo.mp4)
+
+**[Watch the 55-second product demo](docs/demo/cloudscrobble-demo.mp4).** It
+runs against the local sample catalog, so it needs no provider credentials and
+contains no account data.
+
 <table>
   <tr>
     <td align="center"><strong>Demo home</strong></td>
