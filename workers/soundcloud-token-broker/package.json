@@ -13,7 +13,7 @@
     "@cloudflare/workers-types": "^5.20260710.1",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.110.0"
+    "wrangler": "^4.125.0"
   },
   "dependencies": {
     "js-md5": "^0.8.3"
